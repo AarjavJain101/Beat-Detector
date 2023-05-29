@@ -11,7 +11,7 @@ import wave  # Convert audio data to .wav format
 # Set the parameters for the audio recording
 FORMAT              = pyaudio.paInt16
 CHANNELS            = 2
-RECORD_SECONDS      = 5
+RECORD_SECONDS      = 199
 RATE                = 94618  # int(43008 * 2.2)
 CHUNK_SIZE          = 2048
 HISTORY_SECONDS     = 1
@@ -145,6 +145,20 @@ def checkBeatSubBand(instant_energy_sub_bands, energy_history_sub_bands):
 
 
 # ===========================================================================
+# Function:  Confirms if the current detected beat is within an acceptable range of previous beats 
+# Input:     Energy of the current detected beat and the energy history of previusly detected beats
+# Return:    True if the history is less than 20 beats or the detected beat exceeds the threshold and False if not
+def confirmBeat(current_detected_beat, detected_beat_history):
+    max_detected_beat = np.max(detected_beat_history)
+    norm_detected_beat_history = detected_beat_history / max_detected_beat
+    avg_detected_beat = np.mean(detected_beat_history) / max_detected_beat
+    if current_detected_beat / max_detected_beat > avg_detected_beat * np.var(norm_detected_beat_history) * 0.7:
+        detected_beat_history = appendNewEnergy(detected_beat_history, current_detected_beat)
+        return True
+    else:
+        return False
+
+# ===========================================================================
 # Function: Simple function to make a folder with specified name
 # Input:    Name of folder to make
 # Return:   None
@@ -249,13 +263,19 @@ sound_amplitude_buffer = np.array([0 for samples in range(CHUNK_SIZE)], dtype=ob
 instant_energy_sub_bands = []
 energy_history_sub_bands = []
 sub_band_beat = []
+beat_history = []
+for i in range(TOTAL_SUB_BANDS):
+    beat_history.append([])
 bass_chunk = 0
 
+# Initialize lists to store all the data for plotting purposes
 all_freq_values = []
 all_real_amp_data = []
 all_conditions = []
 all_sound = []
 conditions = []
+
+
 time_sum = 0
 
 # Record audio for HISTORY_SECONDS to fill energy history
@@ -285,8 +305,12 @@ while chunks_processed < ((RECORD_SECONDS)* int(RATE / CHUNK_SIZE)):
     all_conditions.append(conditions)
     if (sub_band_beat[0]):
         if chunks_processed - bass_chunk > 4:
-            print(f"Bass {chunks_processed} Energy {instant_energy_sub_bands[0]:.2e}")
-            bass_chunk = chunks_processed
+            if len(beat_history[0]) >= 10:
+                if (confirmBeat(instant_energy_sub_bands[0], beat_history[0])):
+                    print(f"Bass {chunks_processed} Energy {instant_energy_sub_bands[0]:.2e}")
+                    bass_chunk = chunks_processed
+            else:
+                beat_history[0].append(instant_energy_sub_bands[0])
 
     energy_history_sub_bands = appendNewEnergy(energy_history_sub_bands, instant_energy_sub_bands)
     real_amp_data = envelopeFollowFFT(real_amp_data)
