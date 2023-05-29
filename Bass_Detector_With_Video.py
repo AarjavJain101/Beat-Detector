@@ -11,7 +11,7 @@ import wave  # Convert audio data to .wav format
 # Set the parameters for the audio recording
 FORMAT              = pyaudio.paInt16
 CHANNELS            = 2
-RECORD_SECONDS      = 199
+RECORD_SECONDS      = 20
 RATE                = 94618  # int(43008 * 2.2)
 CHUNK_SIZE          = 2048
 HISTORY_SECONDS     = 1
