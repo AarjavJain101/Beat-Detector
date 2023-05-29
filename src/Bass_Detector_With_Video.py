@@ -152,7 +152,7 @@ def confirmBeat(current_detected_beat, detected_beat_history):
     max_detected_beat = np.max(detected_beat_history)
     norm_detected_beat_history = detected_beat_history / max_detected_beat
     avg_detected_beat = np.mean(detected_beat_history) / max_detected_beat
-    if current_detected_beat / max_detected_beat > avg_detected_beat * np.var(norm_detected_beat_history) * 0.7:
+    if current_detected_beat / max_detected_beat > avg_detected_beat * np.var(norm_detected_beat_history) * 0.64:
         detected_beat_history = appendNewEnergy(detected_beat_history, current_detected_beat)
         return True
     else:
