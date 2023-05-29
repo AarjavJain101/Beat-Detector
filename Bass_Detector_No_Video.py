@@ -2,10 +2,7 @@ import numpy as np  # Use numpy for as many calculations as possible bc FAST!
 import pyaudio  # To get audio data from mic
 import time  # For testing how long the processing takes
 import matplotlib.pyplot as plt  # For visualization of FFT
-import os  # Doing ffmpeg commands and making folders
 import cv2 as cv  # Making a movie out of a bunch of frames
-import shutil  # Deleting folders with stuff in them
-import wave  # Convert audio data to .wav format
 
 
 # Set the parameters for the audio recording
