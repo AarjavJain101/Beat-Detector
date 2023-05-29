@@ -8,4 +8,4 @@ Parameters such as the recording time are adjustable at the top of both these pr
 
 For a sample of my bass detector take a look at the video already in the Videos folder. It is a 20 second clip of the song "Millions" by Young Thug. The blue line is the cubed amplitude of the fft output and the orange line is the threshold that must be passed for bass to be detected.
 
-Please make sure that all the folders currently in the src folder are present together with the python files to run.
+Please make sure that all the folders present together with the python files to run.
