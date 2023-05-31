@@ -1,17 +1,18 @@
 import numpy as np  # Use numpy for as many calculations as possible bc FAST!
 import pyaudio  # To get audio data from mic
 import time  # For testing how long the processing takes
-import matplotlib.pyplot as plt  # For visualization of FFT
-import cv2 as cv  # Making a movie out of a bunch of frames
 
 
 # Set the parameters for the audio recording
 FORMAT              = pyaudio.paInt16
 CHANNELS            = 2
 RECORD_SECONDS      = 20
-RATE                = 94618  # round(43008 * 2.2)
+RATE                = 94618  # int(43008 * 2.2)
 CHUNK_SIZE          = 2048
 HISTORY_SECONDS     = 1
+
+CLAP_RANGE_LOW      = 11
+HIHAT_RANGE_LOW     = 27
 
 TOTAL_SUB_BANDS     = 39  # Each sub band is a range of 5 * frequency resolution. it is ~185Hz wide and there are 39 of these
 
@@ -140,6 +141,15 @@ def checkBeatSubBand(instant_energy_sub_bands, energy_history_sub_bands):
             sub_band_beat[i] = True
     return conditions_f, sub_band_beat
 
+
+# ===========================================================================
+# Function:  Simply averages the energies from sub bands clap low to clap high which is the clap energy range 
+# Input:     Instant energy for all sub bands
+# Return:    Average energy in the clap low to clap high sub band region
+def getClapEnergy(instant_energy):
+    return (1.2 * instant_energy[CLAP_RANGE_LOW] + 1.3 * instant_energy[CLAP_RANGE_LOW + 1] + 1.5 * instant_energy[CLAP_RANGE_LOW + 2] + 1.4 * instant_energy[CLAP_RANGE_LOW + 5] + 1.6 * instant_energy[CLAP_RANGE_LOW + 6] + 1.4 * instant_energy[CLAP_RANGE_LOW + 9] + 1.6 * instant_energy[CLAP_RANGE_LOW + 10]) / 10
+
+
 # ===========================================================================
 # Function:  Confirms if the current detected beat is within an acceptable range of previous beats 
 # Input:     Energy of the current detected beat and the energy history of previusly detected beats
@@ -148,7 +158,7 @@ def confirmBeat(current_detected_beat, detected_beat_history):
     max_detected_beat = np.max(detected_beat_history)
     norm_detected_beat_history = detected_beat_history / max_detected_beat
     avg_detected_beat = np.mean(detected_beat_history) / max_detected_beat
-    if current_detected_beat / max_detected_beat > avg_detected_beat * np.var(norm_detected_beat_history) * 0.7:
+    if current_detected_beat / max_detected_beat > avg_detected_beat * np.var(norm_detected_beat_history) * 0.64:
         detected_beat_history = appendNewEnergy(detected_beat_history, current_detected_beat)
         return True
     else:
@@ -169,17 +179,14 @@ sound_amplitude_buffer = np.array([0 for samples in range(CHUNK_SIZE)], dtype=ob
 instant_energy_sub_bands = []
 energy_history_sub_bands = []
 sub_band_beat = []
-beat_history = []
-for i in range(TOTAL_SUB_BANDS):
+beat_history = []  # Currently only tracks bass and clap
+for i in range(2):
     beat_history.append([])
-bass_chunk = 0
 
-# Initialize lists to store all the data for plotting purposes
-all_freq_values = []
-all_real_amp_data = []
-all_conditions = []
-all_sound = []
-conditions = []
+bass_chunk = 0
+clap_energy = 0
+clap_check = 0
+clap_chunk = 0
 
 
 time_sum = 0
@@ -201,14 +208,15 @@ while chunks_processed < (HISTORY_SECONDS * int(RATE / CHUNK_SIZE)):
 # Continue recording audio until the RECORD_SECONDS is fulfilled
 while chunks_processed < ((RECORD_SECONDS)* int(RATE / CHUNK_SIZE)):
     start_time = time.time() * 1000 # Record the start time in milliseconds
-
+    
     # Do processing
     sound_amplitude_buffer = getSoundAmplitudeBuffer(stream)
-    all_sound.append(sound_amplitude_buffer)
     freq_values, real_amp_data = takeFFT(sound_amplitude_buffer, RATE)
     instant_energy_sub_bands = getSubBandInstantEnergyofChunk(real_amp_data)
     conditions, sub_band_beat = checkBeatSubBand(instant_energy_sub_bands, energy_history_sub_bands)
-    all_conditions.append(conditions)
+
+    
+    # Checks Bass
     if (sub_band_beat[0]):
         if chunks_processed - bass_chunk > 4:
             if len(beat_history[0]) >= 10:
@@ -217,12 +225,27 @@ while chunks_processed < ((RECORD_SECONDS)* int(RATE / CHUNK_SIZE)):
                     bass_chunk = chunks_processed
             else:
                 beat_history[0].append(instant_energy_sub_bands[0])
+   
+
+    # Checks Clap
+    clap_energy = getClapEnergy(instant_energy_sub_bands)
+    if (sub_band_beat[CLAP_RANGE_LOW] and sub_band_beat[CLAP_RANGE_LOW + 1] and sub_band_beat[CLAP_RANGE_LOW + 2] and sub_band_beat[CLAP_RANGE_LOW + 5] and sub_band_beat[CLAP_RANGE_LOW + 6] and sub_band_beat[CLAP_RANGE_LOW + 9] and sub_band_beat[CLAP_RANGE_LOW + 10]):
+        if chunks_processed - clap_chunk > 4:
+            if len(beat_history[1]) >= 5:
+                if (confirmBeat(clap_energy * 1.6, beat_history[1])):
+                    print(f"Clap {chunks_processed} Energy {clap_energy:.2e}")
+                    clap_chunk = chunks_processed
+            else:
+                beat_history[1].append(clap_energy)
+
+
+    if chunks_processed - bass_chunk > int(15 * RATE / CHUNK_SIZE) or chunks_processed - clap_chunk > int(15 * RATE / CHUNK_SIZE):
+        beat_history[0] = []
+        beat_history[1] = []
+
 
     energy_history_sub_bands = appendNewEnergy(energy_history_sub_bands, instant_energy_sub_bands)
     real_amp_data = envelopeFollowFFT(real_amp_data)
-    all_freq_values.append(freq_values)
-    all_real_amp_data.append(real_amp_data)
-
     chunks_processed += 1
 
     end_time = time.time() * 1000 # Record the end time in milliseconds

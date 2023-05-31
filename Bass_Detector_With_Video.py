@@ -16,6 +16,9 @@ RATE                = 94618  # int(43008 * 2.2)
 CHUNK_SIZE          = 2048
 HISTORY_SECONDS     = 1
 
+CLAP_RANGE_LOW      = 11
+HIHAT_RANGE_LOW     = 27
+
 TOTAL_SUB_BANDS     = 39  # Each sub band is a range of 5 * frequency resolution. it is ~185Hz wide and there are 39 of these
 
 
@@ -145,6 +148,14 @@ def checkBeatSubBand(instant_energy_sub_bands, energy_history_sub_bands):
 
 
 # ===========================================================================
+# Function:  Simply averages the energies from sub bands clap low to clap high which is the clap energy range 
+# Input:     Instant energy for all sub bands
+# Return:    Average energy in the clap low to clap high sub band region
+def getClapEnergy(instant_energy):
+    return (1.2 * instant_energy[CLAP_RANGE_LOW] + 1.3 * instant_energy[CLAP_RANGE_LOW + 1] + 1.5 * instant_energy[CLAP_RANGE_LOW + 2] + 1.4 * instant_energy[CLAP_RANGE_LOW + 5] + 1.6 * instant_energy[CLAP_RANGE_LOW + 6] + 1.4 * instant_energy[CLAP_RANGE_LOW + 9] + 1.6 * instant_energy[CLAP_RANGE_LOW + 10]) / 10
+
+
+# ===========================================================================
 # Function:  Confirms if the current detected beat is within an acceptable range of previous beats 
 # Input:     Energy of the current detected beat and the energy history of previusly detected beats
 # Return:    True if the history is less than 20 beats or the detected beat exceeds the threshold and False if not
@@ -157,6 +168,7 @@ def confirmBeat(current_detected_beat, detected_beat_history):
         return True
     else:
         return False
+
 
 # ===========================================================================
 # Function: Simple function to make a folder with specified name
@@ -192,8 +204,8 @@ def makePlotsWithThreshold(chunks_processed, all_x_values, all_y_values, all_con
             plt.plot(all_x_values[i], all_conditions_as_y[i], color='orange')
             plt.xlabel(f"Frequency (Hz) {i}")
             plt.ylabel(f"Amplitude {i}")
-            plt.ylim([0, 5e19])
-            plt.xlim([0, 500])
+            plt.ylim([0, 1e17])
+            plt.xlim([6000, 9000])
             plt.savefig(f"Frames_FFT/frame_{(i+1):04d}.png")
             plt.close()
     elif type == 'Audio':
@@ -263,10 +275,14 @@ sound_amplitude_buffer = np.array([0 for samples in range(CHUNK_SIZE)], dtype=ob
 instant_energy_sub_bands = []
 energy_history_sub_bands = []
 sub_band_beat = []
-beat_history = []
-for i in range(TOTAL_SUB_BANDS):
+beat_history = []  # Currently only tracks bass and clap
+for i in range(2):
     beat_history.append([])
+
 bass_chunk = 0
+clap_energy = 0
+clap_check = 0
+clap_chunk = 0
 
 # Initialize lists to store all the data for plotting purposes
 all_freq_values = []
@@ -303,6 +319,9 @@ while chunks_processed < ((RECORD_SECONDS)* int(RATE / CHUNK_SIZE)):
     instant_energy_sub_bands = getSubBandInstantEnergyofChunk(real_amp_data)
     conditions, sub_band_beat = checkBeatSubBand(instant_energy_sub_bands, energy_history_sub_bands)
     all_conditions.append(conditions)
+
+    
+    # Checks Bass
     if (sub_band_beat[0]):
         if chunks_processed - bass_chunk > 4:
             if len(beat_history[0]) >= 10:
@@ -311,6 +330,23 @@ while chunks_processed < ((RECORD_SECONDS)* int(RATE / CHUNK_SIZE)):
                     bass_chunk = chunks_processed
             else:
                 beat_history[0].append(instant_energy_sub_bands[0])
+   
+
+    # Checks Clap
+    clap_energy = getClapEnergy(instant_energy_sub_bands)
+    if (sub_band_beat[CLAP_RANGE_LOW] and sub_band_beat[CLAP_RANGE_LOW + 1] and sub_band_beat[CLAP_RANGE_LOW + 2] and sub_band_beat[CLAP_RANGE_LOW + 5] and sub_band_beat[CLAP_RANGE_LOW + 6] and sub_band_beat[CLAP_RANGE_LOW + 9] and sub_band_beat[CLAP_RANGE_LOW + 10]):
+        if chunks_processed - clap_chunk > 4:
+            if len(beat_history[1]) >= 5:
+                if (confirmBeat(clap_energy * 1.6, beat_history[1])):
+                    print(f"Clap {chunks_processed} Energy {clap_energy:.2e}")
+                    clap_chunk = chunks_processed
+            else:
+                beat_history[1].append(clap_energy)
+
+
+    if chunks_processed - bass_chunk > int(15 * RATE / CHUNK_SIZE) or chunks_processed - clap_chunk > int(15 * RATE / CHUNK_SIZE):
+        beat_history[0] = []
+        beat_history[1] = []
 
     energy_history_sub_bands = appendNewEnergy(energy_history_sub_bands, instant_energy_sub_bands)
     real_amp_data = envelopeFollowFFT(real_amp_data)
