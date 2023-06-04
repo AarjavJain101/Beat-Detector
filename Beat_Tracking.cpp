@@ -17,7 +17,7 @@
 /* ========================== PARAMETERS ========================== */
 
 #define CHANNELS            1
-#define RECORD_SECONDS      50
+#define RECORD_SECONDS      1000
 #define RATE                94618 
 #define CHUNK_SIZE          2048
 #define HISTORY_SECONDS     1
