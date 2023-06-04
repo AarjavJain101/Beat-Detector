@@ -10,6 +10,7 @@
 ## Dependencies
 * This program will use ffmpeg (you will need to install this) to create a video out of both the frames in the folder and the audio data collected and stored as a .wav file in the "Videos" folder. Note this is only for the 'with video' program
 * You will need to install pyaudio to use the the import.
+* C++ the make file will take care of the dependencies. These include FFTW3 and portaudio.
 
 ## Parameters
 Parameters such as the recording time are adjustable at the top of both these progrmas (currently set to 20 seconds).
