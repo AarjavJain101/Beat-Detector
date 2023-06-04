@@ -1,13 +1,10 @@
 /* ===========================================================================      *
  * Author   :   Aarjav Jain                                                         *
- * Date     :   2023-06-03                                                          *
+ * Date     :   2023-06-04                                                          *
  * Purpose  :   Determine when bass and claps occur in real-time (mainly rap)       */
 
 
 /* ========================== DEPENDENCIES ========================== */
-
-#include <stdio.h>
-#include <stdlib.h>
 #include <vector>
 #include <cstring>
 #include <portaudio.h>
@@ -37,7 +34,7 @@
 using namespace std;
 
 
-/* ========================== FUNCTION DECLARATIONS ========================== */
+/* ========================== FUNCTION DEFINITIONS ========================== */
 
 /* ===========================================================================      *
  * Function :   Checks and prints the Port Audio error                              *
@@ -198,7 +195,7 @@ bool confirmBeat(float instant_energy, vector<float>& beat_history)
     float variance = 0;
     for (int i = 0; i < beat_history.size(); i++)
     {
-        variance += pow(beat_history[i] - average_energy, 2);
+        variance += pow(norm_beat_history[i] - average_energy, 2);
     }
     variance = variance / beat_history.size();
 
@@ -222,7 +219,13 @@ bool confirmBeat(float instant_energy, vector<float>& beat_history)
  * Return   :   Clap energy as a float                                              */
 float getClapEnergy(vector<float> instant_energy)
 {
-    return (1.2 * instant_energy[CLAP_RANGE_LOW] + 1.3 * instant_energy[CLAP_RANGE_LOW + 1] + 1.5 * instant_energy[CLAP_RANGE_LOW + 2] + 1.4 * instant_energy[CLAP_RANGE_LOW + 5] + 1.6 * instant_energy[CLAP_RANGE_LOW + 6] + 1.4 * instant_energy[CLAP_RANGE_LOW + 9] + 1.6 * instant_energy[CLAP_RANGE_LOW + 10]) / 10;
+    return (1.2 * instant_energy[CLAP_RANGE_LOW] + 
+            1.3 * instant_energy[CLAP_RANGE_LOW + 1] + 
+            1.5 * instant_energy[CLAP_RANGE_LOW + 2] + 
+            1.4 * instant_energy[CLAP_RANGE_LOW + 5] + 
+            1.6 * instant_energy[CLAP_RANGE_LOW + 6] + 
+            1.4 * instant_energy[CLAP_RANGE_LOW + 9] + 
+            1.6 * instant_energy[CLAP_RANGE_LOW + 10]) / 10;
 }
 
 
@@ -279,7 +282,12 @@ int main()
     checkErr(err);
 
     /* ------------------- INITIALZE CALCULATION VARIABLES ------------------- */
+
+    // Number of chunks processed
     int chunks_processed = 0;
+
+    // Holds the audio data
+    float soundAmplitudeBuffer[CHUNK_SIZE * CHANNELS];
 
     // Energy for each of 39 sub bands as a vector
     vector<float> instant_energy; 
@@ -314,14 +322,19 @@ int main()
     float clap_energy = 0;
 
 
-    while (chunks_processed < (5 * (int)(RATE / CHUNK_SIZE)))
-    {
-        err = Pa_ReadStream(stream, input_data, CHUNK_SIZE);
-        checkErr(err);
+    /* ------------------- START LOOPING THROUGH AUDIO DATA ------------------- */
 
+    // Record audio for HISTORY_SECONDS to fill energy history
+    cout << "History Recording Started..." << endl;
+    fflush(stdout);
+    while (chunks_processed < (HISTORY_SECONDS * (int)(RATE / CHUNK_SIZE)))
+    {
+        err = Pa_ReadStream(stream, soundAmplitudeBuffer, CHUNK_SIZE);
+        checkErr(err);
         for (int i = 0; i < CHUNK_SIZE; i++)
         {
-            input_data[i][REAL] = input_data[i][REAL] * 1000000;
+            input_data[i][REAL] = soundAmplitudeBuffer[i] * 100000;
+            input_data[i][IMAG] = 0;
         }
 
         fftw_execute(plan);                                 //  1. Take FFT of audio data
@@ -330,32 +343,20 @@ int main()
 
         chunks_processed++;
     }
-
-
-    /* ------------------- START LOOPING THROUGH AUDIO DATA ------------------- */
-
-    // Record audio for HISTORY_SECONDS to fill energy history
-    while (chunks_processed < (HISTORY_SECONDS * (int)(RATE / CHUNK_SIZE)))
-    {
-        err = Pa_ReadStream(stream, input_data, CHUNK_SIZE);
-        checkErr(err);
-
-        fftw_execute(plan);                                 //  1. Take FFT of audio data
-        getInstantEnergy(amplitude_data, instant_energy);   //  2. Calculate energy of sub bands
-        energy_history.push_back(instant_energy);           //  3. Append energy history
-
-        chunks_processed++;
-    }
+    cout << "History Recording Ended..." << endl;
+    fflush(stdout);
 
     // Record audio for the rest of RECORD_SECONDS
+    cout << "Total Recording Started..." << endl;
+    fflush(stdout);
     while (chunks_processed < (RECORD_SECONDS * (int)(RATE / CHUNK_SIZE)))
     {
-        err = Pa_ReadStream(stream, input_data, CHUNK_SIZE);
+        err = Pa_ReadStream(stream, soundAmplitudeBuffer, CHUNK_SIZE);
         checkErr(err);
-
         for (int i = 0; i < CHUNK_SIZE; i++)
         {
-            input_data[i][REAL] = input_data[i][REAL] * 1000000;
+            input_data[i][REAL] = soundAmplitudeBuffer[i] * 100000;
+            input_data[i][IMAG] = 0;
         }
 
         fftw_execute(plan);                                         //  1. Take FFT of audio data
@@ -413,7 +414,7 @@ int main()
                 }
             }
         }
-                                                                                    //  6. Reset beat history every 20 seconds
+                                                                                   //  6. Reset beat history every 20 seconds
         if (chunks_processed - bass_chunk > (int)(20 * RATE / CHUNK_SIZE) || chunks_processed - clap_chunk > (int)(20 * RATE / CHUNK_SIZE))
         {
             for (int i = 0; i < 10; i++)
@@ -431,9 +432,11 @@ int main()
 
         chunks_processed++;                                                         //  8. Update chunk count and proceed to next
     }
+    cout << "Total Recording Ending..." << endl;
+    fflush(stdout);
 
 
-    /* ------------------- CLEANUP ------------------- */
+    /* -------------------  CLEANUP ------------------- */
 
     err = Pa_StopStream( stream );
     checkErr(err);
