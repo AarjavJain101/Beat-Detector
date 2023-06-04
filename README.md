@@ -10,7 +10,7 @@
 ## Dependencies
 * This program will use ffmpeg (you will need to install this) to create a video out of both the frames in the folder and the audio data collected and stored as a .wav file in the "Videos" folder. Note this is only for the 'with video' program
 * You will need to install pyaudio to use the the import.
-* C++ the make file will take care of the dependencies. These include FFTW3 and portaudio.
+* The C++ make file will take care of the dependencies. These include FFTW3 and portaudio.
 
 ## Parameters
 Parameters such as the recording time are adjustable at the top of both these progrmas (currently set to 20 seconds).
@@ -19,4 +19,4 @@ Parameters such as the recording time are adjustable at the top of both these pr
 For a sample of my bass detector take a look at the video already in the Videos folder. It is a 20 second clip of the song "Millions" by Young Thug. The blue line is the cubed amplitude of the fft output and the orange line is the threshold that must be passed for bass to be detected.
 
 ## Note
-Please make sure that all the folders present together with the python files to run.
+Please make sure that all the folders present together with the video python file to run.
