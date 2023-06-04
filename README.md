@@ -1,5 +1,6 @@
 # Bass-Detector
-This is a python program that detects bass and claps in music. I created and tested my algorithm (not using CNN or other machine learning) using rap and hip-hop music and as such the algorithm has greatest accuracy when listening to these genres.
+* This is a python program that detects bass and claps in music. I created and tested my algorithm (not using CNN or other machine learning) using rap and hip-hop music and as such the algorithm has greatest accuracy when listening to these genres.
+* The "Bass_Detector" file is the C++ version of the python program (without video) that is used to make the Arduino code
 
 ## Usage
 * The python file titled "Bass_Detector_No_Video.py" will print that bass or claps are detected in the terminal whenever the algorthim captures it
