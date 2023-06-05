@@ -9,9 +9,10 @@ if [ ! -d fftw-3.3.10 ] && [ ! -d portaudio ]; then
 	cd ../portaudio
 	./configure
 	make -j${THREADS} 
+	cd ..
 fi
 
-if [ -f portaudio/.libs/libportaudio.a ]; then 
+if [ -f portaudio/lib/.libs/libportaudio.a ]; then 
 	PORTAUDIO_LIB="libportaudio.a" 
 else 
 	PORTAUDIO_LIB="libportaudio.dll.a" 
