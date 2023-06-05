@@ -5,7 +5,7 @@
 ## Usage
 * The python file titled "Bass_Detector_No_Video.py" will print that bass or claps are detected in the terminal whenever the algorthim captures it
 * The python file titled "Bass_Detector_With_Video.py" will print that bass or claps are detected in the terminal whenever the algorthim captures it AND will fill a folder titled "Frames_FFT" with the plot of the FFT zoomed into the bass region (you may need to play around with the y-range in the makePlotsWithThreshold function to actually see it). 
-* To compile C++ file you will need a UNIX-like environment. Clone the repository and run './build.sh'
+* To compile C++ file you will need a UNIX-like environment. Clone the repository and run `./build.sh`
 
 ## Dependencies
 * This program will use ffmpeg (you will need to install this) to create a video out of both the frames in the folder and the audio data collected and stored as a .wav file in the "Videos" folder. Note this is only for the 'with video' program
