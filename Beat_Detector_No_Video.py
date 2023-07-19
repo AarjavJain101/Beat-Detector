@@ -1,7 +1,5 @@
 import numpy as np  # Use numpy for as many calculations as possible bc FAST!
 import pyaudio  # To get audio data from mic
-import tkinter as tk
-import time
 
 
 # Set the parameters for the audio recording
@@ -89,7 +87,7 @@ def appendNewEnergy(energy_history, instant_energy):
 #            Then check if the instant energy is greater than a certain threshold based on variance 
 # Input:     Instant energy and the energy history
 # Return:    True if a beat occurred, otherwise False
-def checkBeatSubBand(instant_energy_sub_bands, energy_history_sub_bands):
+def checkBeatInChunk(instant_energy_sub_bands, energy_history_sub_bands):
     # Declare variables for function use
     max_energy_sub_bands = []
     sub_band_thresholds = []
@@ -149,7 +147,7 @@ def getHiHatEnergy(instant_energy):
 # Function:  Confirms if the current detected beat is within an acceptable range of previous beats 
 # Input:     Energy of the current detected beat and the energy history of previusly detected beats
 # Return:    True if the history is less than 20 beats or the detected beat exceeds the threshold and False if not
-def confirmBeat(current_detected_beat, detected_beat_history):
+def compareBeat(current_detected_beat, detected_beat_history):
     max_detected_beat = np.max(detected_beat_history)
     norm_detected_beat_history = detected_beat_history / max_detected_beat
     avg_detected_beat = np.mean(detected_beat_history) / max_detected_beat
@@ -158,42 +156,6 @@ def confirmBeat(current_detected_beat, detected_beat_history):
         return True
     else:
         return False
-
-
-# ===========================================================================
-# Function: Change window color
-# Input:    The color to be changed to
-# Return:   None
-def changeColor(color):
-    window.configure(bg=color)
-    window.update()
-
-
-# ===========================================================================
-# Function: Change the colors in a certain pattern when bass is detected
-# Input:    None
-# Return:   None
-def bassScheme():
-    changeColor("#00FF00")
-    time.sleep(0.045)
-
-
-# ===========================================================================
-# Function: Change the colors in a certain pattern when claps are detected
-# Input:    None
-# Return:   None
-def clapScheme():
-    changeColor("#0000FF")
-    time.sleep(0.065)
-
-
-# ===========================================================================
-# Function: Change the colors in a certain pattern when hihats is detected
-# Input:    None
-# Return:   None
-def hihatScheme():
-    changeColor("#FF0000")
-    time.sleep(0.030)
 
 
 # ===========================================================================
@@ -213,140 +175,106 @@ def checkTrueValues(arr, input_num):
 
 
 # ===========================================================================
-# Function: Flash colors based on the final detection
-# Input:    The final detection array
-# Return:   None
-def flashColors(final_detection):
-    if (final_detection[0] and not final_detection[1] and final_detection[2]):
-        bassScheme()
-    elif (not final_detection[0] and final_detection[1] and final_detection[2]):
-        clapScheme()
-    elif (final_detection[0] and final_detection[1] and final_detection[2]):
-        clapScheme()
-    elif (not final_detection[0] and not final_detection[1] and final_detection[2]):
-        hihatScheme()
+# Start program
+
+# Create an instance of the PyAudio class and Open a stream to record audio from your microphone
+audio = pyaudio.PyAudio()
+stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK_SIZE)
+print("Recording started...")
+
+# Initialize a counter for the number of chunks processed, list to store audio_data, instant energy values, and history of energies for ~ 1s of data
+chunks_processed = 0
+sound_amplitude_buffer = np.array([0 for samples in range(CHUNK_SIZE)], dtype=object)
+instant_energy_sub_bands = []
+energy_history_sub_bands = []
+sub_band_beat = []
+beat_history = []  # Currently only tracks bass and clap
+for i in range(3):
+    beat_history.append([])
+
+bass_chunk = 0
+clap_energy = 0
+clap_chunk = 0
+hihat_energy = 0
+hihat_chunk = 0
+
+final_detection = [False, False, False]
+
+time_sum = 0
+
+# Record audio for HISTORY_SECONDS to fill energy history
+while chunks_processed < (HISTORY_SECONDS * int(RATE / CHUNK_SIZE)):
+    # Do processing
+    sound_amplitude_buffer = getSoundAmplitudeBuffer(stream)
+    real_amp_data = takeFFT(sound_amplitude_buffer, RATE)
+    instant_energy_sub_bands = getSubBandInstantEnergyofChunk(real_amp_data)
+    energy_history_sub_bands.append(instant_energy_sub_bands)
+    chunks_processed += 1
 
 
-# ===========================================================================
-# Function: Start the recording, calculations, and lights of the program
-# Input:    None
-# Return:   None
-def click():
-    # Create an instance of the PyAudio class and Open a stream to record audio from your microphone
-    audio = pyaudio.PyAudio()
-    stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, frames_per_buffer=CHUNK_SIZE)
-    print("Recording started...")
-
-    # Initialize a counter for the number of chunks processed, list to store audio_data, instant energy values, and history of energies for ~ 1s of data
-    chunks_processed = 0
-    sound_amplitude_buffer = np.array([0 for samples in range(CHUNK_SIZE)], dtype=object)
-    instant_energy_sub_bands = []
-    energy_history_sub_bands = []
-    sub_band_beat = []
-    beat_history = []  # Currently only tracks bass and clap
-    for i in range(3):
-        beat_history.append([])
-
-    bass_chunk = 0
-    clap_energy = 0
-    clap_chunk = 0
-    hihat_energy = 0
-    hihat_chunk = 0
-
+# Continue recording audio until the RECORD_SECONDS is fulfilled
+while chunks_processed < ((RECORD_SECONDS)* int(RATE / CHUNK_SIZE)):
     final_detection = [False, False, False]
-
-    time_sum = 0
-
-    # Record audio for HISTORY_SECONDS to fill energy history
-    while chunks_processed < (HISTORY_SECONDS * int(RATE / CHUNK_SIZE)):
-        # Do processing
-        sound_amplitude_buffer = getSoundAmplitudeBuffer(stream)
-        real_amp_data = takeFFT(sound_amplitude_buffer, RATE)
-        instant_energy_sub_bands = getSubBandInstantEnergyofChunk(real_amp_data)
-        energy_history_sub_bands.append(instant_energy_sub_bands)
-        chunks_processed += 1
+    
+    # Do processing
+    sound_amplitude_buffer = getSoundAmplitudeBuffer(stream)
+    real_amp_data = takeFFT(sound_amplitude_buffer, RATE)
+    instant_energy_sub_bands = getSubBandInstantEnergyofChunk(real_amp_data)
+    sub_band_beat = checkBeatInChunk(instant_energy_sub_bands, energy_history_sub_bands)
 
 
-    # Continue recording audio until the RECORD_SECONDS is fulfilled
-    while chunks_processed < ((RECORD_SECONDS)* int(RATE / CHUNK_SIZE)):
-        final_detection = [False, False, False]
-        
-        # Do processing
-        sound_amplitude_buffer = getSoundAmplitudeBuffer(stream)
-        real_amp_data = takeFFT(sound_amplitude_buffer, RATE)
-        instant_energy_sub_bands = getSubBandInstantEnergyofChunk(real_amp_data)
-        sub_band_beat = checkBeatSubBand(instant_energy_sub_bands, energy_history_sub_bands)
+    # Checks Bass
+    if (sub_band_beat[0]):
+        if chunks_processed - bass_chunk > 8:
+            if len(beat_history[0]) >= 4:
+                if (compareBeat(instant_energy_sub_bands[0], beat_history[0])):
+                    # print(f"Bass {chunks_processed} Energy {instant_energy_sub_bands[0]:.2e}")
+                    final_detection[0] = True
+                    bass_chunk = chunks_processed
+            else:
+                beat_history[0].append(instant_energy_sub_bands[0])
 
-        # Checks Bass
-        if (sub_band_beat[0]):
-            if chunks_processed - bass_chunk > 8:
-                if len(beat_history[0]) >= 4:
-                    if (confirmBeat(instant_energy_sub_bands[0], beat_history[0])):
-                        # print(f"Bass {chunks_processed} Energy {instant_energy_sub_bands[0]:.2e}")
-                        final_detection[0] = True
-                        bass_chunk = chunks_processed
-                        bassScheme()    
-                else:
-                    beat_history[0].append(instant_energy_sub_bands[0])
+
+    # Checks Clap
+    clap_energy = getClapEnergy(instant_energy_sub_bands)
+    if (sub_band_beat[CLAP_RANGE_LOW] and sub_band_beat[CLAP_RANGE_LOW + 1] and sub_band_beat[CLAP_RANGE_LOW + 2] and sub_band_beat[CLAP_RANGE_LOW + 5] and sub_band_beat[CLAP_RANGE_LOW + 6] and sub_band_beat[CLAP_RANGE_LOW + 9] and sub_band_beat[CLAP_RANGE_LOW + 10]):
+        if chunks_processed - clap_chunk >= 4:
+            if len(beat_history[1]) >= 3:
+                if (compareBeat(clap_energy * 1.6, beat_history[1])):
+                    # print(f"Gap: {chunks_processed - clap_chunk} Clap {chunks_processed} Energy {clap_energy:.2e}")
+                    final_detection[1] = True 
+                    clap_chunk = chunks_processed
+            else:
+                beat_history[1].append(clap_energy)
     
 
-        # Checks Clap
-        clap_energy = getClapEnergy(instant_energy_sub_bands)
-        if (sub_band_beat[CLAP_RANGE_LOW] and sub_band_beat[CLAP_RANGE_LOW + 1] and sub_band_beat[CLAP_RANGE_LOW + 2] and sub_band_beat[CLAP_RANGE_LOW + 5] and sub_band_beat[CLAP_RANGE_LOW + 6] and sub_band_beat[CLAP_RANGE_LOW + 9] and sub_band_beat[CLAP_RANGE_LOW + 10]):
-            if chunks_processed - clap_chunk >= 4:
-                if len(beat_history[1]) >= 3:
-                    if (confirmBeat(clap_energy * 1.6, beat_history[1])):
-                        # print(f"Gap: {chunks_processed - clap_chunk} Clap {chunks_processed} Energy {clap_energy:.2e}")
-                        final_detection[1] = True 
-                        clapScheme()
-                        clap_chunk = chunks_processed
-                else:
-                    beat_history[1].append(clap_energy)
-        
-        # Check HiHat
-        hihat_energy = getHiHatEnergy(instant_energy_sub_bands)
-        if (checkTrueValues([sub_band_beat[HIHAT_RANGE_LOW], sub_band_beat[HIHAT_RANGE_LOW + 1], sub_band_beat[HIHAT_RANGE_LOW + 2], sub_band_beat[HIHAT_RANGE_LOW + 3], sub_band_beat[HIHAT_RANGE_LOW + 4]], 1)):
-            if chunks_processed - hihat_chunk > 4:
-                if len(beat_history[2]) >= 5:
-                    if (confirmBeat(hihat_energy, beat_history[2])):
-                        print(f"Gap:{chunks_processed - hihat_chunk} HiHat {chunks_processed} Energy {hihat_energy:.2e}")
-                        final_detection[2] = True
-                        hihat_chunk = chunks_processed
-                else:
-                    beat_history[2].append(hihat_energy)
-        
-
-        flashColors(final_detection)
-        changeColor("#000000")
+    # Check HiHat
+    hihat_energy = getHiHatEnergy(instant_energy_sub_bands)
+    if (checkTrueValues([sub_band_beat[HIHAT_RANGE_LOW], sub_band_beat[HIHAT_RANGE_LOW + 1], sub_band_beat[HIHAT_RANGE_LOW + 2], sub_band_beat[HIHAT_RANGE_LOW + 3], sub_band_beat[HIHAT_RANGE_LOW + 4]], 1)):
+        if chunks_processed - hihat_chunk > 4:
+            if len(beat_history[2]) >= 5:
+                if (compareBeat(hihat_energy, beat_history[2])):
+                    print(f"Gap:{chunks_processed - hihat_chunk} HiHat {chunks_processed} Energy {hihat_energy:.2e}")
+                    final_detection[2] = True
+                    hihat_chunk = chunks_processed
+            else:
+                beat_history[2].append(hihat_energy)
 
 
-        if chunks_processed - bass_chunk > int(5 * RATE / CHUNK_SIZE):
-            beat_history[0] = []
-            beat_history[1] = []
-            beat_history[2] = []
+    # Refresh Beat History
+    if chunks_processed - bass_chunk > int(5 * RATE / CHUNK_SIZE):
+        beat_history[0] = []
+        beat_history[1] = []
+        beat_history[2] = []
 
 
-        energy_history_sub_bands = appendNewEnergy(energy_history_sub_bands, instant_energy_sub_bands)
-        chunks_processed += 1
+    energy_history_sub_bands = appendNewEnergy(energy_history_sub_bands, instant_energy_sub_bands)
+    chunks_processed += 1
 
 
-    print("Recording stopped.")
+print("Recording stopped.")
 
-    # Close the audio stream
-    stream.stop_stream()
-    stream.close()
-    audio.terminate()
-
-
-# Create the window
-window = tk.Tk()
-window.title("Light Room")
-window.geometry("500x500")
-window.configure(bg="black")
-
-# Create button to start stream
-start_button = tk.Button(window, text="Start", command=click)
-start_button.pack()
-
-# Run the window
-window.mainloop()
+# Close the audio stream
+stream.stop_stream()
+stream.close()
+audio.terminate()
