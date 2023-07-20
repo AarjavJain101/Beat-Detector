@@ -237,11 +237,11 @@ while chunks_processed < ((RECORD_SECONDS)* int(RATE / CHUNK_SIZE)):
 
     # Checks Clap
     clap_energy = getClapEnergy(instant_energy_sub_bands)
-    if (sub_band_beat[CLAP_RANGE_LOW] and sub_band_beat[CLAP_RANGE_LOW + 1] and sub_band_beat[CLAP_RANGE_LOW + 2] and sub_band_beat[CLAP_RANGE_LOW + 5] and sub_band_beat[CLAP_RANGE_LOW + 6] and sub_band_beat[CLAP_RANGE_LOW + 9] and sub_band_beat[CLAP_RANGE_LOW + 10]):
+    if (checkTrueValues([sub_band_beat[CLAP_RANGE_LOW], sub_band_beat[CLAP_RANGE_LOW + 1], sub_band_beat[CLAP_RANGE_LOW + 2], sub_band_beat[CLAP_RANGE_LOW + 5], sub_band_beat[CLAP_RANGE_LOW + 6], sub_band_beat[CLAP_RANGE_LOW + 9], sub_band_beat[CLAP_RANGE_LOW + 10]], 7)):
         if chunks_processed - clap_chunk >= 4:
             if len(beat_history[1]) >= 3:
                 if (compareBeat(clap_energy * 1.6, beat_history[1])):
-                    # print(f"Gap: {chunks_processed - clap_chunk} Clap {chunks_processed} Energy {clap_energy:.2e}")
+                    print(f"Gap: {chunks_processed - clap_chunk} Clap {chunks_processed} Energy {clap_energy:.2e}")
                     final_detection[1] = True 
                     clap_chunk = chunks_processed
             else:
@@ -251,21 +251,14 @@ while chunks_processed < ((RECORD_SECONDS)* int(RATE / CHUNK_SIZE)):
     # Check HiHat
     hihat_energy = getHiHatEnergy(instant_energy_sub_bands)
     if (checkTrueValues([sub_band_beat[HIHAT_RANGE_LOW], sub_band_beat[HIHAT_RANGE_LOW + 1], sub_band_beat[HIHAT_RANGE_LOW + 2], sub_band_beat[HIHAT_RANGE_LOW + 3], sub_band_beat[HIHAT_RANGE_LOW + 4]], 1)):
-        if chunks_processed - hihat_chunk > 4:
+        if chunks_processed - hihat_chunk > 3:
             if len(beat_history[2]) >= 5:
                 if (compareBeat(hihat_energy, beat_history[2])):
-                    print(f"Gap:{chunks_processed - hihat_chunk} HiHat {chunks_processed} Energy {hihat_energy:.2e}")
+                    # print(f"Gap:{chunks_processed - hihat_chunk} HiHat {chunks_processed} Energy {hihat_energy:.2e}")
                     final_detection[2] = True
                     hihat_chunk = chunks_processed
             else:
                 beat_history[2].append(hihat_energy)
-
-
-    # Refresh Beat History
-    if chunks_processed - bass_chunk > int(5 * RATE / CHUNK_SIZE):
-        beat_history[0] = []
-        beat_history[1] = []
-        beat_history[2] = []
 
 
     energy_history_sub_bands = appendNewEnergy(energy_history_sub_bands, instant_energy_sub_bands)

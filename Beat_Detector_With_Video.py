@@ -405,7 +405,7 @@ while chunks_processed < ((RECORD_SECONDS)* int(RATE / CHUNK_SIZE)):
     # Check HiHat
     hihat_energy = getHiHatEnergy(instant_energy_sub_bands)
     if (checkTrueValues([sub_band_beat[HIHAT_RANGE_LOW], sub_band_beat[HIHAT_RANGE_LOW + 1], sub_band_beat[HIHAT_RANGE_LOW + 2], sub_band_beat[HIHAT_RANGE_LOW + 3], sub_band_beat[HIHAT_RANGE_LOW + 4]], 1)):
-        if chunks_processed - hihat_chunk > 4:
+        if chunks_processed - hihat_chunk > 3:
             if len(beat_history[2]) >= 5:
                 if (compareBeat(hihat_energy, beat_history[2])):
                     print(f"Gap:{chunks_processed - hihat_chunk} HiHat {chunks_processed} Energy {hihat_energy:.2e}")
@@ -413,10 +413,6 @@ while chunks_processed < ((RECORD_SECONDS)* int(RATE / CHUNK_SIZE)):
             else:
                 beat_history[2].append(hihat_energy)
 
-
-    if chunks_processed - bass_chunk > int(15 * RATE / CHUNK_SIZE) or chunks_processed - clap_chunk > int(15 * RATE / CHUNK_SIZE):
-        beat_history[0] = []
-        beat_history[1] = []
 
     energy_history_sub_bands = appendNewEnergy(energy_history_sub_bands, instant_energy_sub_bands)
     real_amp_data = envelopeFollowFFT(real_amp_data)
