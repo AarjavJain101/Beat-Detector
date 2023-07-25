@@ -42,6 +42,8 @@ bool compareBeat(float instant_energy, vector<float> &beat_history);
 float getClapEnergy(vector<float> instant_energy);
 float getHiHatEnergy(vector<float> instant_energy);
 bool checkTrueValues(vector<bool> sub_band_beat, int numTrue);
+float getAverage(vector<int> hihat_gap_array);
+int getMode(vector<int> hihat_gap_array);
 
 
 /* ========================== BEGIN MAIN FUNCTION ========================== */
@@ -131,6 +133,10 @@ int main()
     float clap_energy = 0;
     int hihat_chunk = 0;
     float hihat_energy = 0;
+    int hihat_gap_mode = 0;
+    float hihat_gap_average = 0;
+    vector<int> hihat_gap_array;
+    hihat_gap_array.resize(25, 0);
 
 
     /* ------------------- START LOOPING THROUGH AUDIO DATA ------------------- */
@@ -175,7 +181,7 @@ int main()
         checkBeatInChunk(instant_energy, energy_history, sub_band_beat); //  3. Check for a beat
         if (sub_band_beat[0])                                     //  4. Accuretly check bass
         {
-            if (chunks_processed - bass_chunk > 8)
+            if (chunks_processed - bass_chunk > 5)
             {
                 if (beat_history[0][4] > 0)
                 {
@@ -215,8 +221,8 @@ int main()
                 {
                     if (compareBeat(clap_energy * 1.6, beat_history[1]))
                     {
-                        cout << "Clap: " << chunks_processed << "   "
-                             << "Energy: " << clap_energy << endl;
+                        // cout << "Clap: " << chunks_processed << "   "
+                        //      << "Energy: " << clap_energy << endl;
                         std::fflush(stdout);
                         clap_chunk = chunks_processed;
                     }
@@ -244,10 +250,30 @@ int main()
                 {
                     if (compareBeat(hihat_energy, beat_history[2]))
                     {
-                        cout << "HiHat: " << chunks_processed << "   "
-                             << "Energy: " << hihat_energy << endl;
+                        // cout << "HiHat: " << chunks_processed << "   "
+                        //      << "Energy: " << hihat_energy << endl;
                         std::fflush(stdout);
                         hihat_chunk = chunks_processed;
+
+                        // Find the first index that is 0 in the gap array
+                        int i = 0;
+                        while (hihat_gap_array[i] > 0)
+                        {
+                            i++;
+                        }
+                        
+                        // If gap array not full yet then fill it
+                        if (i < 25)
+                        {
+                            hihat_gap_array[i] = chunks_processed - hihat_chunk;
+                        }
+                        else
+                        {
+                            hihat_gap_average = getAverage(hihat_gap_array);
+                            hihat_gap_mode = getMode(hihat_gap_array);
+                            hihat_gap_array.erase(hihat_gap_array.begin());
+                            hihat_gap_array.push_back(chunks_processed - hihat_chunk);
+                        }
                     }
                 }
                 else
@@ -533,4 +559,48 @@ bool checkTrueValues(vector<bool> sub_band_beat, int numTrue)
     {
         return false;
     }
+}
+
+
+/* ===========================================================================     *
+ * Function :   Calculate the average of an array of integers                      *
+ * Input    :   The array of integers                                              *
+ * Return   :   The average of the array                                           */
+float getAverage(vector<int> hihat_gap_array)
+{
+    float sum = 0;
+    for (int i = 0; i < hihat_gap_array.size(); i++)
+    {
+        sum += hihat_gap_array[i];
+    }
+    return sum / hihat_gap_array.size();
+}
+
+
+/* ===========================================================================     *
+ * Function :   Calculate the mode of an array of integers                         *
+ * Input    :   The array of integers                                              *
+ * Return   :   The mode of the array                                              */
+int getMode(vector<int> hihat_gap_array)
+{
+    int mode = 0;
+    int maxCount = 0;
+    int arraySize = hihat_gap_array.size();
+    for (int i = 0; i < arraySize; i++)
+    {
+        int count = 0;
+        for (int j = 0; j < arraySize; j++)
+        {
+            if (hihat_gap_array[j] == hihat_gap_array[i])
+            {
+                count++;
+            }
+        }
+        if (count > maxCount)
+        {
+            maxCount = count;
+            mode = hihat_gap_array[i];
+        }
+    }
+    return mode;
 }
