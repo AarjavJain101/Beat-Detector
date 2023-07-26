@@ -1,4 +1,5 @@
 # Bass-Detector
+* Run the Light_Room.exe to use the program. It is ~30MB due to being built in Python. A C++ version of ~2MB is near...
 * This is a Python and C++ program that detects bass and claps and hi-hats in music. I created and tested my algorithm (not using CNN or other machine learning) using rap and hip-hop music and as such the algorithm has the greatest accuracy when listening to these genres.
 * The "Beat_Tracking" file is the C++ version of the Python program (without video) that is used to make the Arduino code
 
