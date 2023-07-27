@@ -1,7 +1,8 @@
 /* ===========================================================================      *
  * Author   :   Aarjav Jain                                                         *
  * Date     :   2023-06-04                                                          *
- * Purpose  :   Determine when bass and claps occur in real-time (mainly rap)       */
+ * Purpose  :   Determine when bass and claps and hihats occur in real-time        */
+
 
 /* ========================== DEPENDENCIES ========================== */
 #include <vector>
@@ -11,11 +12,15 @@
 #include <fftw3.h>
 #include <math.h>
 #include <iostream>
+#include <windows.h>
+#include <time.h>
+#include <commctrl.h>
+#include <synchapi.h>
+
 
 /* ========================== PARAMETERS ========================== */
 
 #define CHANNELS 1
-#define RECORD_SECONDS 999999
 #define RATE 94618
 #define CHUNK_SIZE 2048
 #define HISTORY_SECONDS 1
@@ -24,7 +29,7 @@
 #define CLAP_RANGE_LOW 11
 #define HIHAT_RANGE_LOW 27
 
-#define TOTAL_SUB_BANDS 39 // Each sub band is a range of 5 * frequency resolution. it is ~185Hz wide and there are 39 of these
+#define TOTAL_SUB_BANDS 39 // Each sub band is a range of 5 * frequency resolution. it is ~230Hz wide and there are 39 of these
 
 #define REAL 0
 #define IMAG 1
@@ -44,285 +49,205 @@ float getHiHatEnergy(vector<float> instant_energy);
 bool checkTrueValues(vector<bool> sub_band_beat, int numTrue);
 float getAverage(vector<int> hihat_gap_array);
 int getMode(vector<int> hihat_gap_array);
+float getAbs(float num);
+int mainAudioProcessing();
 
 
-/* ========================== BEGIN MAIN FUNCTION ========================== */
+/* ========================== GLOBAL VARIABLES ========================== */
 
-int main()
+static struct {
+    int red = 0, green = 0, blue = 0;
+    bool isRunning = false;
+    int type[3] = {0, 0, 0};
+    int redrawCounterHiHat = 0;
+    int redrawCounterClap = 0;
+    double decayRate;
+    HWND button;
+} state;
+
+
+/* ========================== MAIN PROCEDURE ========================== */
+
+LRESULT CALLBACK proc(HWND hwnd, int message, WPARAM wpm,LPARAM lpm)
 {
-    /* ------------------- SETTING UP THE PROGRAM ------------------- */
-
-    // initialize PortAudio
-    PaError err;
-    err = Pa_Initialize();
-    checkErr(err);
-
-    // Set up input stream parameters
-    PaStreamParameters inputParameters;
-    PaStreamParameters outputParameters;
-
-    inputParameters.device = Pa_GetDefaultInputDevice();
-    inputParameters.channelCount = CHANNELS;
-    inputParameters.sampleFormat = FORMAT;
-    inputParameters.suggestedLatency = Pa_GetDeviceInfo(inputParameters.device)->defaultHighInputLatency;
-    inputParameters.hostApiSpecificStreamInfo = NULL;
-
-    outputParameters.device = Pa_GetDefaultOutputDevice();
-    outputParameters.channelCount = CHANNELS;
-    outputParameters.sampleFormat = FORMAT;
-    outputParameters.suggestedLatency = Pa_GetDeviceInfo(outputParameters.device)->defaultHighOutputLatency;
-    outputParameters.hostApiSpecificStreamInfo = NULL;
-
-    // Setup stream
-    PaStream *stream;
-    err = Pa_OpenStream(
-        &stream,
-        &inputParameters,
-        &outputParameters,
-        RATE,
-        CHUNK_SIZE,
-        paClipOff,
-        NULL,
-        NULL);
-    checkErr(err);
-
-    // Make fft plan before starting stream so that input is not overflowed
-    fftw_complex *input_data, *amplitude_data;
-    fftw_plan plan;
-    input_data = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * CHUNK_SIZE);
-    amplitude_data = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * CHUNK_SIZE);
-    plan = fftw_plan_dft_1d(CHUNK_SIZE, input_data, amplitude_data, FFTW_FORWARD, FFTW_PATIENT);
-
-    // Start stream
-    err = Pa_StartStream(stream);
-    checkErr(err);
-
-    /* ------------------- INITIALZE CALCULATION VARIABLES ------------------- */
-
-    // Number of chunks processed
-    int chunks_processed = 0;
-
-    // Holds the audio data
-    float soundAmplitudeBuffer[CHUNK_SIZE * CHANNELS];
-
-    // Energy for each of 39 sub bands as a vector
-    vector<float> instant_energy;
-    instant_energy.resize(TOTAL_SUB_BANDS, 0);
-
-    // Energy history for HISTORY_SECONDS taken at RATE / CHUNK_SIZE times per second
-    vector<vector<float>> energy_history;
-
-    // Beat tracking variable for each sub band (true if there is a beat otherwise false)
-    vector<bool> sub_band_beat;
-    sub_band_beat.resize(TOTAL_SUB_BANDS, true);
-
-    // Beat history for successfully detected bass and claps and hihats
-    vector<vector<float>> beat_history;
-    for (int i = 0; i < 3; i++)
+    if (message == WM_DESTROY)
     {
-        beat_history.push_back({0});
-        for (int j = 0; j < 4; j++)
+        PostQuitMessage(0);
+        return 0;
+    }
+    
+    // Create toggle button for starting and stopping recording
+    else if (message == WM_COMMAND)
+    {
+        if (state.isRunning)
         {
-            beat_history[i].push_back(0);
+            SendMessageA(state.button, WM_SETTEXT, 0, (LPARAM)"Start");
+            state.isRunning = false;
         }
+        else
+        {
+            // Use multithreading
+            HANDLE thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)mainAudioProcessing, NULL, 0, NULL);
+            state.isRunning = true;
+            SendMessageA( state.button, WM_SETTEXT, 0, (LPARAM)"Stop" );
+        }
+
     }
 
-    // Chunk/time trackers and energy for bass, claps, and hihats
-    int bass_chunk = 0;
-    int clap_chunk = 0;
-    float clap_energy = 0;
-    int hihat_chunk = 0;
-    float hihat_energy = 0;
-    int hihat_gap_mode = 0;
-    float hihat_gap_average = 0;
-    vector<int> hihat_gap_array;
-    hihat_gap_array.resize(25, 0);
-
-
-    /* ------------------- START LOOPING THROUGH AUDIO DATA ------------------- */
-
-    // Record audio for HISTORY_SECONDS to fill energy history
-    cout << "History Recording Started..." << endl;
-    std::fflush(stdout);
-    while (chunks_processed < (HISTORY_SECONDS * (int)(RATE / CHUNK_SIZE)))
-    {
-        err = Pa_ReadStream(stream, soundAmplitudeBuffer, CHUNK_SIZE);
-        checkErr(err);
-        for (int i = 0; i < CHUNK_SIZE; i++)
-        {
-            input_data[i][REAL] = soundAmplitudeBuffer[i] * 100000;
-            input_data[i][IMAG] = 0;
+    // Upon a redraw request change the background color
+    else if (message == WM_PAINT)
+    {   
+        // Use various if statements to handle different beat cases
+        // Note: flip RGB values for correct color
+        // Ex. state.red = desired blue value, state.green = desired green value, state.blue = desired red value
+        if (state.redrawCounterClap > 1 && state.type[0] == 1 && state.type[1] == 0 && state.type[2] == 1) {
+            state.red = 253;
+            state.green = 247;
+            state.blue = 38;
+            state.type[0] = 0;
+            state.type[1] = 0;
+            state.type[2] = 0;
+            state.redrawCounterHiHat = 0;
+            state.decayRate = 0.75;
+        } 
+        else if (state.type[0] == 1 && state.type[1] == 0 && state.type[2] == 0) {
+            state.red = 253;
+            state.green = 247;
+            state.blue = 38;
+            state.type[0] = 0;
+            state.type[1] = 0;
+            state.type[2] = 0;
+            state.redrawCounterHiHat = 0;
+            state.decayRate = 0.75;
+        } 
+        else if (state.type[0] == 0 && state.type[1] == 1 && state.type[2] == 1) {
+            state.red = 0;
+            state.green = 255;
+            state.blue = 255;
+            state.type[0] = 0;
+            state.type[1] = 0;
+            state.type[2] = 0;
+            state.redrawCounterHiHat = 0;
+            state.redrawCounterClap = 0;
+            state.decayRate = 0.92;
+        } 
+        else if (state.type[0] == 1 && state.type[1] == 1 && state.type[2] == 0) {
+            state.red = 0;
+            state.green = 255;
+            state.blue = 255;
+            state.type[0] = 0;
+            state.type[1] = 0;
+            state.type[2] = 0;
+            state.redrawCounterHiHat = 0;
+            state.redrawCounterClap = 0;
+            state.decayRate = 0.92;
+        } 
+        else if (state.type[0] == 1 && state.type[1] == 1 && state.type[2] == 1) {
+            state.red = 0;
+            state.green = 255;
+            state.blue = 255;
+            state.type[0] = 0;
+            state.type[1] = 0;
+            state.type[2] = 0;
+            state.redrawCounterHiHat = 0;
+            state.redrawCounterClap = 0;
+            state.decayRate = 0.92;
+        } 
+        else if (state.type[0] == 0 && state.type[1] == 1 && state.type[2] == 0) {
+            state.red = 0;
+            state.green = 255;
+            state.blue = 255;
+            state.type[0] = 0;
+            state.type[1] = 0;
+            state.type[2] = 0;
+            state.redrawCounterHiHat = 0;
+            state.redrawCounterClap = 0;
+            state.decayRate = 0.90;
+        } 
+        else if (state.redrawCounterHiHat > 3 && state.type[0] == 0 && state.type[1] == 0 && state.type[2] == 1) {
+            state.red = 121;
+            state.green = 110;
+            state.blue = 183;
+            state.type[0] = 0;
+            state.type[1] = 0;
+            state.type[2] = 0;
+            state.decayRate = 0.45;
         }
 
-        fftw_execute(plan);                               //  1. Take FFT of audio data
-        getInstantEnergy(amplitude_data, instant_energy); //  2. Calculate energy of sub bands
-        energy_history.push_back(instant_energy);         //  3. Append energy history
+        state.redrawCounterHiHat++;
+        state.redrawCounterClap++;
 
-        chunks_processed++;
+        // Use decay rates for a fading effect
+        state.red *= state.decayRate;
+        state.green *= state.decayRate;
+        state.blue *= state.decayRate;
+        
+        // Now do the actual painting
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint( hwnd, &ps );
+
+        // Push bits of red and green to combine into an integer representing the color
+        HBRUSH brush = CreateSolidBrush((state.red << 16) | (state.green << 8) | state.blue);
+        FillRect(hdc, &ps.rcPaint, brush);
+
+        EndPaint(hwnd, &ps);
     }
-    cout << "History Recording Ended..." << endl;
-    std::fflush(stdout);
-
-    // Record audio for the rest of RECORD_SECONDS
-    cout << "Total Recording Started..." << endl;
-    std::fflush(stdout);
-    while (chunks_processed < (RECORD_SECONDS * (int)(RATE / CHUNK_SIZE)))
+    else if (message == WM_TIMER)
     {
-        err = Pa_ReadStream(stream, soundAmplitudeBuffer, CHUNK_SIZE);
-        checkErr(err);
-        for (int i = 0; i < CHUNK_SIZE; i++)
-        {
-            input_data[i][REAL] = soundAmplitudeBuffer[i] * 100000;
-            input_data[i][IMAG] = 0;
-        }
-
-        fftw_execute(plan);                                       //  1. Take FFT of audio data
-        getInstantEnergy(amplitude_data, instant_energy);         //  2. Calculate energy of sub bands
-        checkBeatInChunk(instant_energy, energy_history, sub_band_beat); //  3. Check for a beat
-        if (sub_band_beat[0])                                     //  4. Accuretly check bass
-        {
-            if (chunks_processed - bass_chunk > 5)
-            {
-                if (beat_history[0][4] > 0)
-                {
-                    if (compareBeat(instant_energy[0], beat_history[0]))
-                    {
-                        cout << "Bass: " << chunks_processed << "   "
-                             << "Energy: " << instant_energy[0] << endl;
-                        std::fflush(stdout);
-                        bass_chunk = chunks_processed;
-                    }
-                }
-                else
-                {
-                    // Find the first index that is 0 in beat history
-                    int i = 0;
-                    while (beat_history[0][i] > 0)
-                    {
-                        i++;
-                    }
-                    beat_history[0][i] = instant_energy[0];
-                }
-            }
-        }
-
-        clap_energy = getClapEnergy(instant_energy);                //  5. Accuretly check claps
-        if (sub_band_beat[CLAP_RANGE_LOW] 
-            && sub_band_beat[CLAP_RANGE_LOW + 1] 
-            && sub_band_beat[CLAP_RANGE_LOW + 2] 
-            && sub_band_beat[CLAP_RANGE_LOW + 5] 
-            && sub_band_beat[CLAP_RANGE_LOW + 6] 
-            && sub_band_beat[CLAP_RANGE_LOW + 9] 
-            && sub_band_beat[CLAP_RANGE_LOW + 10])
-        {
-            if (chunks_processed - clap_chunk > 4)
-            {
-                if (beat_history[1][4] > 0)
-                {
-                    if (compareBeat(clap_energy * 1.6, beat_history[1]))
-                    {
-                        // cout << "Clap: " << chunks_processed << "   "
-                        //      << "Energy: " << clap_energy << endl;
-                        std::fflush(stdout);
-                        clap_chunk = chunks_processed;
-                    }
-                }
-                else
-                {
-                    // Find the first index that is 0 in beat history
-                    int i = 0;
-                    while (beat_history[1][i] > 0)
-                    {
-                        i++;
-                    }
-                    beat_history[1][i] = clap_energy;
-                }
-            }
-        }
-
-
-        hihat_energy = getHiHatEnergy(instant_energy);                //  6. Accuretly check hihats
-        if (checkTrueValues({sub_band_beat[HIHAT_RANGE_LOW], sub_band_beat[HIHAT_RANGE_LOW + 1], sub_band_beat[HIHAT_RANGE_LOW + 2], sub_band_beat[HIHAT_RANGE_LOW + 3], sub_band_beat[HIHAT_RANGE_LOW + 4]}, 1))
-        {
-            if (chunks_processed - hihat_chunk > 3)
-            {
-                if (beat_history[2][4] > 0)
-                {
-                    if (compareBeat(hihat_energy, beat_history[2]))
-                    {
-                        // cout << "HiHat: " << chunks_processed << "   "
-                        //      << "Energy: " << hihat_energy << endl;
-                        std::fflush(stdout);
-                        hihat_chunk = chunks_processed;
-
-                        // Find the first index that is 0 in the gap array
-                        int i = 0;
-                        while (hihat_gap_array[i] > 0)
-                        {
-                            i++;
-                        }
-                        
-                        // If gap array not full yet then fill it
-                        if (i < 25)
-                        {
-                            hihat_gap_array[i] = chunks_processed - hihat_chunk;
-                        }
-                        else
-                        {
-                            hihat_gap_average = getAverage(hihat_gap_array);
-                            hihat_gap_mode = getMode(hihat_gap_array);
-                            hihat_gap_array.erase(hihat_gap_array.begin());
-                            hihat_gap_array.push_back(chunks_processed - hihat_chunk);
-                        }
-                    }
-                }
-                else
-                {
-                    // Find the first index that is 0 in beat history
-                    int i = 0;
-                    while (beat_history[2][i] > 0)
-                    {
-                        i++;
-                    }
-                    beat_history[2][i] = hihat_energy;
-                }
-            }
-        }
-
-
-        //  7. Reset bass and clap beat history if no bass for 5 seconds
-        if (chunks_processed - bass_chunk > (int)(5 * RATE / CHUNK_SIZE))
-        {
-            for (int j = 0; j < 2; j++)
-            {
-                for (int i = 0; i < 5; i++)
-                {
-                    beat_history[j][i] = 0;
-                }
-            }
-        }
-
-        energy_history.erase(energy_history.begin()); //  8. Update energy history
-        energy_history.push_back(instant_energy);
-
-        chunks_processed++; //  9. Update chunk count and proceed to next
+        // Redraw window every ~13ms
+        RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE);
     }
-    cout << "Total Recording Ending..." << endl;
-    std::fflush(stdout);
 
-    /* -------------------  CLEANUP ------------------- */
+    return DefWindowProc(hwnd, message, wpm, lpm);
+}
 
-    err = Pa_StopStream(stream);
-    checkErr(err);
 
-    err = Pa_CloseStream(stream);
-    checkErr(err);
+// Main window API function
+int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE previnstance, LPSTR args, int display_mode)
+{
+    // Set up and register window class
+    char classname[] = "AudioVisualizer";
 
-    Pa_Terminate();
+    tagWNDCLASSA wndClass = {0};
+    wndClass.lpfnWndProc = (WNDPROC)proc;
+    wndClass.hInstance = hinstance;
+    wndClass.lpszClassName = classname;
+    RegisterClassA(&wndClass);
 
-    fftw_destroy_plan(plan);
-    fftw_free(input_data);
-    fftw_free(amplitude_data);
+    // Create the window handle
+    HWND window = CreateWindowA(classname,
+                                "Light Room",
+                                WS_OVERLAPPEDWINDOW,
+                                CW_USEDEFAULT, CW_USEDEFAULT,
+                                CW_USEDEFAULT, CW_USEDEFAULT,
+                                NULL,
+                                NULL,
+                                hinstance,
+                                NULL);
+
+    // Create the button handle
+    state.button = CreateWindowA("BUTTON",
+                            "Start",
+                            BS_PUSHBUTTON | WS_VISIBLE | WS_CHILD,
+                            0, 0,
+                            100, 30,
+                            window,
+                            NULL,
+                            hinstance,
+                            NULL);
+
+    ShowWindow(window, display_mode);
+
+    // Redraw window every ~13ms
+    SetTimer(window, 0, 600.0 * CHUNK_SIZE / RATE, NULL);
+    
+    // Handle messages
+    MSG msg = {0};
+    while (GetMessage( &msg, NULL, 0, 0) > 0 )
+    {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
 
     return 0;
 }
@@ -571,9 +496,9 @@ float getAverage(vector<int> hihat_gap_array)
     float sum = 0;
     for (int i = 0; i < hihat_gap_array.size(); i++)
     {
-        sum += hihat_gap_array[i];
+        sum += 1.0 * hihat_gap_array[i];
     }
-    return sum / hihat_gap_array.size();
+    return (sum / hihat_gap_array.size());
 }
 
 
@@ -603,4 +528,314 @@ int getMode(vector<int> hihat_gap_array)
         }
     }
     return mode;
+}
+
+
+/* ===========================================================================     *
+ * Function :   Calculate the absolute value of a float                            *
+ * Input    :   The float                                                          *
+ * Return   :   The absolute value of the float                                    */
+float getAbs(float num)
+{
+    if (num < 0)
+    {
+        return -num;
+    }
+    else
+    {
+        return num;
+    }
+}
+
+
+/* ===========================================================================     *
+ * Function :   Do the audio processing                                            *
+ * Input    :   None                                                               *
+ * Return   :   None                                                               */
+int mainAudioProcessing()
+{
+    /* ------------------- SETTING UP THE PROGRAM ------------------- */
+    // initialize PortAudio
+    PaError err;
+    err = Pa_Initialize();
+    checkErr(err);
+
+    // Set up input stream parameters
+    PaStreamParameters inputParameters;
+    PaStreamParameters outputParameters;
+
+    inputParameters.device = Pa_GetDefaultInputDevice();
+    inputParameters.channelCount = CHANNELS;
+    inputParameters.sampleFormat = FORMAT;
+    inputParameters.suggestedLatency = Pa_GetDeviceInfo(inputParameters.device)->defaultHighInputLatency;
+    inputParameters.hostApiSpecificStreamInfo = NULL;
+
+    outputParameters.device = Pa_GetDefaultOutputDevice();
+    outputParameters.channelCount = CHANNELS;
+    outputParameters.sampleFormat = FORMAT;
+    outputParameters.suggestedLatency = Pa_GetDeviceInfo(outputParameters.device)->defaultHighOutputLatency;
+    outputParameters.hostApiSpecificStreamInfo = NULL;
+
+    // Setup stream
+    PaStream *stream;
+    err = Pa_OpenStream(
+        &stream,
+        &inputParameters,
+        &outputParameters,
+        RATE,
+        CHUNK_SIZE,
+        paClipOff,
+        NULL,
+        NULL);
+    checkErr(err);
+
+    // Make fft plan before starting stream so that input is not overflowed
+    fftw_complex *input_data, *amplitude_data;
+    fftw_plan plan;
+    input_data = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * CHUNK_SIZE);
+    amplitude_data = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * CHUNK_SIZE);
+    plan = fftw_plan_dft_1d(CHUNK_SIZE, input_data, amplitude_data, FFTW_FORWARD, FFTW_PATIENT);
+
+    // Start stream
+    err = Pa_StartStream(stream);
+    checkErr(err);
+
+    /* ------------------- INITIALZE CALCULATION VARIABLES ------------------- */
+
+    // Number of chunks processed
+    int chunks_processed = 0;
+
+    // Holds the audio data
+    float soundAmplitudeBuffer[CHUNK_SIZE * CHANNELS];
+
+    // Energy for each of 39 sub bands as a vector
+    vector<float> instant_energy;
+    instant_energy.resize(TOTAL_SUB_BANDS, 0);
+
+    // Energy history for HISTORY_SECONDS taken at RATE / CHUNK_SIZE times per second
+    vector<vector<float>> energy_history;
+
+    // Beat tracking variable for each sub band (true if there is a beat otherwise false)
+    vector<bool> sub_band_beat;
+    sub_band_beat.resize(TOTAL_SUB_BANDS, true);
+
+    // Beat history for successfully detected bass and claps and hihats
+    vector<vector<float>> beat_history;
+    for (int i = 0; i < 3; i++)
+    {
+        beat_history.push_back({0});
+        for (int j = 0; j < 4; j++)
+        {
+            beat_history[i].push_back(0);
+        }
+    }
+
+    // Chunk/time trackers and energy for bass, claps, and hihats
+    int bass_chunk = 0;
+    int clap_chunk = 0;
+    float clap_energy = 0;
+    int hihat_chunk = 0;
+    float hihat_energy = 0;
+    int hihat_gap_mode = 0;
+    float hihat_gap_average = 0;
+    vector<int> hihat_gap_array;
+    hihat_gap_array.resize(35, 0);
+
+
+    /* ------------------- START LOOPING THROUGH AUDIO DATA ------------------- */
+
+    // Record audio for HISTORY_SECONDS to fill energy history
+    cout << "History Recording Started..." << endl;
+    std::fflush(stdout);
+    while (chunks_processed < (HISTORY_SECONDS * (int)(RATE / CHUNK_SIZE)))
+    {
+        err = Pa_ReadStream(stream, soundAmplitudeBuffer, CHUNK_SIZE);
+        checkErr(err);
+        for (int i = 0; i < CHUNK_SIZE; i++)
+        {
+            input_data[i][REAL] = soundAmplitudeBuffer[i] * 100000;
+            input_data[i][IMAG] = 0;
+        }
+
+        fftw_execute(plan);                               //  1. Take FFT of audio data
+        getInstantEnergy(amplitude_data, instant_energy); //  2. Calculate energy of sub bands
+        energy_history.push_back(instant_energy);         //  3. Append energy history
+
+        chunks_processed++;
+    }
+    cout << "History Recording Ended..." << endl;
+    std::fflush(stdout);
+
+    // Record audio for the rest of RECORD_SECONDS
+    cout << "Total Recording Started..." << endl;
+    std::fflush(stdout);
+    while (state.isRunning)
+    {
+        err = Pa_ReadStream(stream, soundAmplitudeBuffer, CHUNK_SIZE);
+        checkErr(err);
+        for (int i = 0; i < CHUNK_SIZE; i++)
+        {
+            input_data[i][REAL] = soundAmplitudeBuffer[i] * 100000;
+            input_data[i][IMAG] = 0;
+        }
+
+        fftw_execute(plan);                                       //  1. Take FFT of audio data
+        getInstantEnergy(amplitude_data, instant_energy);         //  2. Calculate energy of sub bands
+        checkBeatInChunk(instant_energy, energy_history, sub_band_beat); //  3. Check for a beat
+        if (sub_band_beat[0])                                     //  4. Accuretly check bass
+        {
+            if (chunks_processed - bass_chunk > 5)
+            {
+                if (beat_history[0][4] > 0)
+                {
+                    if (compareBeat(instant_energy[0], beat_history[0]))
+                    {
+                        // cout << "Bass: " << chunks_processed << "   "
+                        //      << "Energy: " << instant_energy[0] << endl;
+                        std::fflush(stdout);
+                        state.type[0] = 1;
+                        bass_chunk = chunks_processed;
+                    }
+                }
+                else
+                {
+                    // Find the first index that is 0 in beat history
+                    int i = 0;
+                    while (beat_history[0][i] > 0)
+                    {
+                        i++;
+                    }
+                    beat_history[0][i] = instant_energy[0];
+                }
+            }
+        }
+
+        clap_energy = getClapEnergy(instant_energy);                //  5. Accuretly check claps
+        if (sub_band_beat[CLAP_RANGE_LOW] 
+            && sub_band_beat[CLAP_RANGE_LOW + 1] 
+            && sub_band_beat[CLAP_RANGE_LOW + 2] 
+            && sub_band_beat[CLAP_RANGE_LOW + 5] 
+            && sub_band_beat[CLAP_RANGE_LOW + 6] 
+            && sub_band_beat[CLAP_RANGE_LOW + 9] 
+            && sub_band_beat[CLAP_RANGE_LOW + 10])
+        {
+            if (chunks_processed - clap_chunk > 4)
+            {
+                if (beat_history[1][4] > 0)
+                {
+                    if (compareBeat(clap_energy * 1.6, beat_history[1]))
+                    {
+                        // cout << "Clap: " << chunks_processed << "   "
+                        //      << "Energy: " << clap_energy << endl;
+                        std::fflush(stdout);
+                        state.type[1] = 1;
+                        clap_chunk = chunks_processed;
+                    }
+                }
+                else
+                {
+                    // Find the first index that is 0 in beat history
+                    int i = 0;
+                    while (beat_history[1][i] > 0)
+                    {
+                        i++;
+                    }
+                    beat_history[1][i] = clap_energy;
+                }
+            }
+        }
+
+
+        hihat_energy = getHiHatEnergy(instant_energy);                //  6. Accuretly check hihats
+        if (checkTrueValues({sub_band_beat[HIHAT_RANGE_LOW], sub_band_beat[HIHAT_RANGE_LOW + 1], sub_band_beat[HIHAT_RANGE_LOW + 2], sub_band_beat[HIHAT_RANGE_LOW + 3], sub_band_beat[HIHAT_RANGE_LOW + 4]}, 1))
+        {
+            if (chunks_processed - hihat_chunk > 3)
+            {
+                if (beat_history[2][4] > 0)
+                {
+                    if (compareBeat(hihat_energy, beat_history[2]))
+                    {
+                        // cout << "HiHat: " << chunks_processed << "   "
+                        //      << "Energy: " << hihat_energy << endl;
+                        std::fflush(stdout);
+
+                        // Find the first index that is 0 in the gap array
+                        int i = 0;
+                        while (i < 35 && hihat_gap_array[i] > 0)
+                        {
+                            i++;
+                        }
+                        
+                        // If gap array not full yet then fill it
+                        if (i < 35)
+                        {
+                            hihat_gap_array[i] = chunks_processed - hihat_chunk;
+                        }                        
+                        else
+                        {
+                            hihat_gap_average = getAverage(hihat_gap_array);
+                            hihat_gap_mode = getMode(hihat_gap_array);
+                            for (int i = 0; i < 35; i++)
+                            {
+                                hihat_gap_array[i] = 0;
+                            }
+                        }
+
+                        hihat_chunk = chunks_processed;
+
+                        if (hihat_gap_mode > 0 && getAbs((hihat_gap_average / hihat_gap_mode) - 1) < 0.50 && hihat_gap_mode >= 7)
+                        {
+                            state.type[2] = 1;
+                        }
+                    }
+                }
+                else
+                {
+                    // Find the first index that is 0 in beat history
+                    int i = 0;
+                    while (beat_history[2][i] > 0)
+                    {
+                        i++;
+                    }
+                    beat_history[2][i] = hihat_energy;
+                }
+            }
+        }
+
+
+        //  7. Reset bass and clap beat history if no bass for 5 seconds
+        if (chunks_processed - bass_chunk > (int)(5 * RATE / CHUNK_SIZE))
+        {
+            for (int j = 0; j < 2; j++)
+            {
+                for (int i = 0; i < 5; i++)
+                {
+                    beat_history[j][i] = 0;
+                }
+            }
+        }
+
+        energy_history.erase(energy_history.begin()); //  8. Update energy history
+        energy_history.push_back(instant_energy);
+
+        chunks_processed++; //  9. Update chunk count and proceed to next
+    }
+    cout << "Total Recording Ending..." << endl;
+    std::fflush(stdout);
+
+    /* -------------------  CLEANUP ------------------- */
+
+    err = Pa_StopStream(stream);
+    checkErr(err);
+
+    err = Pa_CloseStream(stream);
+    checkErr(err);
+
+    Pa_Terminate();
+
+    fftw_destroy_plan(plan);
+    fftw_free(input_data);
+    fftw_free(amplitude_data);
+
+    return 0;
 }
