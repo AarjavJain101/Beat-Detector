@@ -1,5 +1,5 @@
 /* ===========================================================================      *
- * Author   :   Aarjav Jain                                                         *
+ * Authors  :   Aarjav Jain, Rhys Byers                                             *
  * Date     :   2023-06-04                                                          *
  * Purpose  :   Determine when bass and claps and hihats occur in real-time        */
 
@@ -196,6 +196,7 @@ LRESULT CALLBACK proc(HWND hwnd, int message, WPARAM wpm,LPARAM lpm)
     {
         // Redraw window every ~13ms
         RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE);
+	UpdateWindow( state.button );
     }
 
     return DefWindowProc(hwnd, message, wpm, lpm);
