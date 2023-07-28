@@ -100,7 +100,7 @@ LRESULT CALLBACK proc(HWND hwnd, int message, WPARAM wpm,LPARAM lpm)
         // Use various if statements to handle different beat cases
         // Note: flip RGB values for correct color
         // Ex. state.red = desired blue value, state.green = desired green value, state.blue = desired red value
-        if (state.redrawCounterClap > 1 && state.type[0] == 1 && state.type[1] == 0 && state.type[2] == 1) {
+        if (state.redrawCounterClap > 3 && state.type[0] == 1 && state.type[1] == 0 && state.type[2] == 1) {
             state.red = 253;
             state.green = 247;
             state.blue = 38;
@@ -108,7 +108,7 @@ LRESULT CALLBACK proc(HWND hwnd, int message, WPARAM wpm,LPARAM lpm)
             state.type[1] = 0;
             state.type[2] = 0;
             state.redrawCounterHiHat = 0;
-            state.decayRate = 0.75;
+            state.decayRate = 0.82;
         } 
         else if (state.type[0] == 1 && state.type[1] == 0 && state.type[2] == 0) {
             state.red = 253;
@@ -118,7 +118,7 @@ LRESULT CALLBACK proc(HWND hwnd, int message, WPARAM wpm,LPARAM lpm)
             state.type[1] = 0;
             state.type[2] = 0;
             state.redrawCounterHiHat = 0;
-            state.decayRate = 0.75;
+            state.decayRate = 0.82;
         } 
         else if (state.type[0] == 0 && state.type[1] == 1 && state.type[2] == 1) {
             state.red = 0;
@@ -239,7 +239,7 @@ int WINAPI WinMain(HINSTANCE hinstance, HINSTANCE previnstance, LPSTR args, int 
     ShowWindow(window, display_mode);
 
     // Redraw window every ~13ms
-    SetTimer(window, 0, 600.0 * CHUNK_SIZE / RATE, NULL);
+    SetTimer(window, 0, 1000.0 / 60, NULL);
     
     // Handle messages
     MSG msg = {0};
@@ -624,7 +624,7 @@ int mainAudioProcessing()
     for (int i = 0; i < 3; i++)
     {
         beat_history.push_back({0});
-        for (int j = 0; j < 4; j++)
+        for (int j = 0; j < 3; j++)
         {
             beat_history[i].push_back(0);
         }
@@ -684,9 +684,9 @@ int mainAudioProcessing()
         checkBeatInChunk(instant_energy, energy_history, sub_band_beat); //  3. Check for a beat
         if (sub_band_beat[0])                                     //  4. Accuretly check bass
         {
-            if (chunks_processed - bass_chunk > 5)
+            if (chunks_processed - bass_chunk > 8)
             {
-                if (beat_history[0][4] > 0)
+                if (beat_history[0][3] > 0)
                 {
                     if (compareBeat(instant_energy[0], beat_history[0]))
                     {
@@ -721,7 +721,7 @@ int mainAudioProcessing()
         {
             if (chunks_processed - clap_chunk > 4)
             {
-                if (beat_history[1][4] > 0)
+                if (beat_history[1][3] > 0)
                 {
                     if (compareBeat(clap_energy * 1.6, beat_history[1]))
                     {
@@ -751,12 +751,10 @@ int mainAudioProcessing()
         {
             if (chunks_processed - hihat_chunk > 3)
             {
-                if (beat_history[2][4] > 0)
+                if (beat_history[2][3] > 0)
                 {
                     if (compareBeat(hihat_energy, beat_history[2]))
                     {
-                        // cout << "HiHat: " << chunks_processed << "   "
-                        //      << "Energy: " << hihat_energy << endl;
                         std::fflush(stdout);
 
                         // Find the first index that is 0 in the gap array
@@ -775,12 +773,14 @@ int mainAudioProcessing()
                         {
                             hihat_gap_average = getAverage(hihat_gap_array);
                             hihat_gap_mode = getMode(hihat_gap_array);
-                            for (int i = 0; i < 35; i++)
-                            {
-                                hihat_gap_array[i] = 0;
-                            }
-                        }
 
+                            // Reset the hihat_gap_array
+                            for (int i = 0; i < hihat_gap_array.size() - 1; i++)
+                            {
+                                hihat_gap_array[i] = hihat_gap_array[i + 1];
+                            }
+                            hihat_gap_array[hihat_gap_array.size() - 1] = chunks_processed - hihat_chunk;
+                        }
                         hihat_chunk = chunks_processed;
 
                         if (hihat_gap_mode > 0 && getAbs((hihat_gap_average / hihat_gap_mode) - 1) < 0.50 && hihat_gap_mode >= 7)
@@ -803,17 +803,17 @@ int mainAudioProcessing()
         }
 
 
-        //  7. Reset bass and clap beat history if no bass for 5 seconds
-        if (chunks_processed - bass_chunk > (int)(5 * RATE / CHUNK_SIZE))
-        {
-            for (int j = 0; j < 2; j++)
-            {
-                for (int i = 0; i < 5; i++)
-                {
-                    beat_history[j][i] = 0;
-                }
-            }
-        }
+        // //  7. Reset bass and clap beat history if no bass for 5 seconds
+        // if (chunks_processed - bass_chunk > (int)(5 * RATE / CHUNK_SIZE))
+        // {
+        //     for (int j = 0; j < 2; j++)
+        //     {
+        //         for (int i = 0; i < 5; i++)
+        //         {
+        //             beat_history[j][i] = 0;
+        //         }
+        //     }
+        // }
 
         energy_history.erase(energy_history.begin()); //  8. Update energy history
         energy_history.push_back(instant_energy);
