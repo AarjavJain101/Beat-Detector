@@ -5,7 +5,7 @@
 ## Usage
 * **"Beat_Detector_No_Video.py"** - Opens mic and prints what type of beat was detected in the terminal.
 * **"Beat_Detector_With_Video.py"** - Opens mic, prints the type of beat that was detected, creates frames and fills **Frames_FFT** folder, then creates and adds the no audio video, with audio video, and .wav file  to the **Videos** folder. These videos are the FFT ENERGY spectrum (blue) as the song is played WITH the orange-colored thresholds for beats in a certain frequency band.
-* **"Beat_Tracking.cpp"** - Compile and download with `./build.sh` command. **CREDIT TO {Rhys Byers}(https://github.com/rhys-b)** for developing the GUI for the light room experience.
+* **"Beat_Tracking.cpp"** - Compile and download with `./build.sh` command. **CREDIT TO [Rhys Byers](https://github.com/rhys-b)** for developing the GUI for the light room experience.
 * **"Beat_Tracking.exe"** - Pre-complied and standalone executable. Run it for the GUI light room experience.
 * **"Light_Room.py"** - Opens mic, creates GUI, click start to run the beat detection and flash lights on screen to the beat.
 * **"Lyric_Room.py"** - Opens mic, creates GUI, you play a song from Spotify, then click start to run the beat detection and synched lyrics. Note that the program will try to find the lyrics. If not the program simply does not display them. Also, you need to register your app on Spotify then go to the dashboard and get the client_id, client_secret, and find your username.
@@ -20,9 +20,9 @@
 * **"Beat_Detector_With_Video.py"** - pyaudio, numpy, matplotlib.pyplot, OpenCV, wave.
 * **"Beat_Tracking.cpp"** - portaudio.h, fftw3.h. These will automatically downloaded and complied with the command `./build.sh'.
 * **"Light_Room.py"** - pyaudio, numpy, tkinter
-* **"Lyric_Room.py"** - pyaudio, numpy, tkinter, {spotipy}(https://github.com/spotipy-dev/spotipy), {synchedlyrics}(https://github.com/rtcq/syncedlyrics).
-* **"filterSongs.py"** - {synchedlyrics}(https://github.com/rtcq/syncedlyrics).
-* **"getUserTracks.py"** - {spotipy}(https://github.com/spotipy-dev/spotipy)
+* **"Lyric_Room.py"** - pyaudio, numpy, tkinter, [spotipy](https://github.com/spotipy-dev/spotipy), [synchedlyrics](https://github.com/rtcq/syncedlyrics).
+* **"filterSongs.py"** - [synchedlyrics](https://github.com/rtcq/syncedlyrics).
+* **"getUserTracks.py"** - [spotipy](https://github.com/spotipy-dev/spotipy)
 
 ## Parameters
 FORMAT              = pyaudio.paInt16
