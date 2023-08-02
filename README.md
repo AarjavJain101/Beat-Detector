@@ -1,6 +1,6 @@
 # Bass-Detector
 * This is a C\C++ and Python program that detects bass, claps, and hi-hats in music. Works well with hip-hop, rap, and party music.
-* * Download and Run the **Beat_Tracking.exe** to use the application. **Windows Only**
+* Download and Run the **Beat_Tracking.exe** to use the application. **Windows Only**
 
 ## Usage
 * **"Beat_Detector_No_Video.py"** - Opens mic and prints what type of beat was detected in the terminal.
