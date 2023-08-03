@@ -22,7 +22,8 @@ TOTAL_SUB_BANDS     = 39  # Each sub band is a range of 5 * frequency resolution
 
 # Set the parameters for the GUI
 PROVIDER = ["MusixMatch", "NetEase"]
-FONT = "Kristen ITC"
+# FONT = "Chiller" "Forte" Kristen ITC" "Showcard Gothic" "Viner Hand ITC" "Impact"
+FONT = "Impact"
 
 # Lover Boy type colors
 # BASS_COLOR = "#0000FF"
@@ -30,16 +31,22 @@ FONT = "Kristen ITC"
 # HIHAT_COLOR = "#882888"
 
 # Hype type colors
-BASS_COLOR = "#FF0000"
-CLAP_COLOR = "#FFFF00"
-HIHAT_COLOR = "#882888"
+# BASS_COLOR = "#FF0000"
+# CLAP_COLOR = "#FFFF00"
+# HIHAT_COLOR = "#882888"
 
 # # Party/Club type colors
 # BASS_COLOR = "#89CFEF"
 # CLAP_COLOR = "#FFFF00"
 # HIHAT_COLOR = "#882888"
 
-LABEL_FG_NO_COLOR = "#FF0000"
+# Current Colors
+BASS_COLOR = "#FFD700" # Gold color representing victory and success
+CLAP_COLOR = "#00FF00" # Green color symbolizing growth and prosperity
+HIHAT_COLOR = "#FF0000" # Red color to add energy and excitement
+HIHAT_COLOR_DIMMED = "#808080" # Dimmed gray color for the hihats, providing contrast and balance
+
+LABEL_FG_NO_COLOR = "#FF6F6F"
 LABEL_FG_COLOR = "#FFFFFF"
 
 # Parameters for the timing of lyrics
@@ -201,11 +208,11 @@ def confirmBeat(current_detected_beat, detected_beat_history):
 # Function: Change window color
 # Input:    The color to be changed to
 # Return:   None
-def changeColor(color):
+def changeColor(color, lastColor):
     window.configure(bg=color)
     window.update()
     if color == "#000000":
-        label.configure(bg=color, fg=LABEL_FG_NO_COLOR)
+        label.configure(bg=color, fg=lastColor)
     else:
         label.configure(bg=color, fg=LABEL_FG_COLOR)
     label.update()
@@ -216,12 +223,9 @@ def changeColor(color):
 # Input:    None
 # Return:   None
 def bassScheme(type):
-    if (type == "ultra"):
-        changeColor(BASS_COLOR)
-        time.sleep(0.045)
-    else:
-        changeColor(BASS_COLOR)
-        time.sleep(0.045)
+    changeColor(BASS_COLOR, LABEL_FG_COLOR)
+    time.sleep(0.045)
+    return BASS_COLOR
 
 
 # ===========================================================================
@@ -229,8 +233,9 @@ def bassScheme(type):
 # Input:    None
 # Return:   None
 def clapScheme():
-    changeColor(CLAP_COLOR)
+    changeColor(CLAP_COLOR, LABEL_FG_COLOR)
     time.sleep(0.065)
+    return CLAP_COLOR
 
 
 # ===========================================================================
@@ -239,11 +244,13 @@ def clapScheme():
 # Return:   None
 def hihatScheme(type):
     if (type == "ultra"):
-        changeColor(HIHAT_COLOR)
+        changeColor(HIHAT_COLOR, LABEL_FG_COLOR)
         time.sleep(0.020)
+        return HIHAT_COLOR
     else:
-        changeColor("#000000")
-        time.sleep(0.001)
+        changeColor(HIHAT_COLOR_DIMMED, LABEL_FG_COLOR)
+        time.sleep(0.020)
+        return HIHAT_COLOR_DIMMED
 
 
 # ===========================================================================
@@ -268,17 +275,17 @@ def checkTrueValues(arr, input_num):
 # Return:   None
 def flashColors(final_detection, type):
     if (final_detection[0] and not final_detection[1] and final_detection[2]):
-        bassScheme(type)
+        return bassScheme(type)
     elif (final_detection[0] and not final_detection[1] and not final_detection[2]):
-        bassScheme(type)
+        return bassScheme(type)
     elif (not final_detection[0] and final_detection[1] and final_detection[2]):
-        clapScheme()
+        return clapScheme()
     elif (final_detection[0] and final_detection[1] and final_detection[2]):
-        clapScheme()
+        return clapScheme()
     elif (not final_detection[0] and final_detection[1] and not final_detection[2]):
-        clapScheme()
+        return clapScheme()
     elif (not final_detection[0] and not final_detection[1] and final_detection[2]):
-        hihatScheme(type)
+        return hihatScheme(type)
 
 
 # ===========================================================================
@@ -328,6 +335,9 @@ def removeBrackets(input_string):
     if input_string[0] == '(' and input_string[-1] == ')':
         return input_string[1:-1]
     
+    if input_string[0] == '[' and input_string[-1] == ']':
+        return input_string[1:-1]
+    
     for index, char in enumerate(input_string):
         if char == '(' or char == ')':
             brackets_index.append(index)
@@ -356,33 +366,19 @@ def removeBrackets(input_string):
 # Input:    The big string with the time stamps and the lyrics
 # Return:   The time stamps in chunks and the lines by lines lyrics
 def parseLyrics(lrc):
-    # Initiliaze time=stamp list, lyric list, and chunk time constant
-    time_stamps = []
+    all_text = lrc.split("\n")
     all_lines = []
-
+    time_stamps = []
     chunk_in_ms = (CHUNK_SIZE / RATE) * 1000
 
-    i = 0
-    while (i < len(lrc)): 
-        if (lrc[i] == '['):
-            # Calculate time stamp as chunks
-            minutes = int(lrc[i + 1 : i + 3])
-            seconds = float(lrc[i + 4 : i + 9])
-
-            time_stamps.append(round((minutes * 60 * 1000 + seconds * 1000) / chunk_in_ms))
-            i = lrc.index(']', i)
-            if lrc[i] == " ":
-                i += 2
-            else:
-                i += 1
-        else:
-            line_start = i
-            while (i < len(lrc) and lrc[i] != '['):
-                i += 1
-            line = lrc[line_start : i - 1]
-            line = removeBrackets(line)
-            all_lines.append(line)
-
+    # Split the time and the line
+    for i in range(len(all_text) - 1):
+        line = removeBrackets(all_text[i].split("]", 1)[1])
+        minutes = int(all_text[i][1:3])
+        seconds = float(all_text[i][4:9])
+        time_stamps.append(round((minutes * 60 * 1000 + seconds * 1000) / chunk_in_ms))
+        all_lines.append(line)
+    
     return time_stamps, all_lines
 
 
@@ -450,6 +446,8 @@ def click():
     word_count = 0
 
     final_detection = [False, False, False]
+
+    lastColor = LABEL_FG_NO_COLOR
 
     sp = get_spotify_client()
     if sp:
@@ -557,10 +555,10 @@ def click():
                         beat_history[2].append(hihat_energy)
             
             if (hihat_gap_mode > 0 and np.abs((hihat_gap_average / hihat_gap_mode) - 1) < 0.50 and hihat_gap_mode >= 7):
-                flashColors(final_detection, "ultra") 
+                lastColor = flashColors(final_detection, "ultra") 
             else: 
-                flashColors(final_detection, "normal")
-            changeColor("#000000")
+                lastColor = flashColors(final_detection, "ultra")
+            changeColor("#000000", lastColor)
 
             if not skipText:
                 # Set lyrics chunks and remove passed lyrics
@@ -576,6 +574,20 @@ def click():
                     isNewSong = False
 
 
+                # LINE BY LINE SYNCHED LYRICS
+                # lyrics_chunks = int((time.perf_counter() - time_start) / (CHUNK_SIZE / RATE))
+                # if times[time_stamp_index] + TIME_LOW < lyrics_chunks < times[time_stamp_index] + TIME_HIGH:
+                #     if len(lines[time_stamp_index]) < 20:
+                #         label.config(text=lines[time_stamp_index], font=(FONT, 90, "bold", "italic"))
+                #     else:
+                #         label.config(text=lines[time_stamp_index], font=(FONT, 65, "bold", "italic"))
+                # elif lyrics_chunks >= times[time_stamp_index] + TIME_HIGH:
+                #     time_stamp_index += 1
+                # 
+                # label.update()
+
+
+                # WORD BY WORD SYNCHED LYRICS
                 # Is the lyric chunk timed for the current line?
                 lyrics_chunks = int((time.perf_counter() - time_start) / (CHUNK_SIZE / RATE))
                 timed_line = timeWords(lines[time_stamp_index], times[time_stamp_index + 1] - times[time_stamp_index])
@@ -602,6 +614,7 @@ def click():
                         time_stamp_index += 1
 
                 label.update()
+
         
             energy_history_sub_bands = appendNewEnergy(energy_history_sub_bands, instant_energy_sub_bands)
             chunks_processed += 1
