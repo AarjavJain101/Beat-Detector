@@ -9,7 +9,7 @@
 * **"Beat_Tracking.exe"** - Pre-complied and standalone executable. Run it for the GUI light room experience.
 * **"Light_Room.py"** - Opens mic, creates GUI, click start to run the beat detection and flash lights on screen to the beat.
 * **"Lyric_Room.py"** - Opens mic, creates GUI, you play a song from Spotify, then click start to run the beat detection and synched lyrics. Note that the program will try to find the lyrics. If not the program simply does not display them. Also, you need to register your app on Spotify then go to the dashboard and get the client_id, client_secret, and find your username.
-* **"Drake_Gods_Plan.mkv"** - Video example of the **"Lyric_Room.py"** using the song "God's Plan" by Drake. This displays green hihats, blue bass, and orange claps with synched lyrics.
+* **"Drake_Gods_Plan.mkv"** - Video example of the **"Lyric_Room.py"** using the song "God's Plan" by Drake. This displays green hihats, blue bass, and orange claps with synched lyrics. NOTE: Framerate seems to degrade later in the video :(.
 * **"Key_Glock_Penny.mkv"** - Video example of **"Beat_Tracking.exe"** using the song "Penny" by Key Glock. This displays the fading effect of light blue bass, orange claps, and dim hihats.
 * **build.sh** - The shell script for compiling **"Beat_Tracking.cpp"** with the necessary dependencies. See **Dependencies** below.
 * **"filterSongs.py"** - Used to find which songs have searchable lyrics assuming a format like "ARTIST_NAMES - SONG_NAME".
