@@ -25,45 +25,36 @@
 * **"getUserTracks.py"** - [spotipy](https://github.com/spotipy-dev/spotipy)
 
 ## Parameters
-FORMAT              = pyaudio.paInt16
-CHANNELS            = 2
-RECORD_SECONDS      = 9999999
-RATE                = 94618  # int(43008 * 2.2)
-CHUNK_SIZE          = 2048
-HISTORY_SECONDS     = 1
+* RATE              = 94618
+* CHUNK_SIZE        = 2048
+* HISTORY_SECONDS   = 1
 
-CLAP_RANGE_LOW      = 11
-HIHAT_RANGE_LOW     = 27
+* CLAP_RANGE_LOW      = 11
+* HIHAT_RANGE_LOW     = 27
 
-TOTAL_SUB_BANDS     = 39  # Each sub band is a range of 5 * frequency resolution. it is ~230Hz wide and there are 39 of these
+* TOTAL_SUB_BANDS     = 39  # Each sub band is a range of 5 * frequency resolution. it is ~230Hz wide and there are 39 of these
 
 ### Set the parameters for the GUI
-PROVIDER = ["MusixMatch", "NetEase"]
-FONT = "Kristen ITC"
+* PROVIDER = ["MusixMatch", "NetEase"]
+* FONT = "Kristen ITC"
 
-### Lover Boy type colors
+### Calm Pink Type Colors
 BASS_COLOR = "#0000FF"
 CLAP_COLOR = "#FF6FFF"
 HIHAT_COLOR = "#882888"
 
 ### Hype type colors
-BASS_COLOR = "#FF0000"
-CLAP_COLOR = "#FFFF00"
-HIHAT_COLOR = "#882888"
+* BASS_COLOR = "#FF0000"
+* CLAP_COLOR = "#FFFF00"
+* HIHAT_COLOR = "#882888"
 
 ### Party/Club type colors
-BASS_COLOR = "#89CFEF"
-CLAP_COLOR = "#FFFF00"
-HIHAT_COLOR = "#882888"
+* BASS_COLOR = "#89CFEF"
+* CLAP_COLOR = "#FFFF00"
+* HIHAT_COLOR = "#882888"
 
-LABEL_FG_NO_COLOR = "#FF0000"
-LABEL_FG_COLOR = "#FFFFFF"
-
-### Parameters for the timing of lyrics
-EXTRA_CHUNKS = 46
-TIME_LOW = -2
-TIME_HIGH = 14
-
+* LABEL_FG_NO_COLOR = "#FF0000"
+* LABEL_FG_COLOR = "#FFFFFF"
 
 ## Note
 Please make sure that all the folders are present together with the video Python file to run.
